@@ -25,8 +25,12 @@ void Devices::loadMappings() {
 #ifdef __ANDROID__
 	count = SDL_GameControllerAddMappingsFromFile("gamecontrollerdb.txt");
 #else
+	if (char* base = SDL_GetBasePath()) {
+		count = SDL_GameControllerAddMappingsFromFile((std::string(base) + "gamecontrollerdb.txt").c_str());
+		SDL_free(base);
+	}
 #ifdef REDBOUND_CONTROLLERDB
-	count = SDL_GameControllerAddMappingsFromFile(REDBOUND_CONTROLLERDB);
+	if (count <= 0) count = SDL_GameControllerAddMappingsFromFile(REDBOUND_CONTROLLERDB);
 #endif
 	if (const char* home = getenv("HOME")) {
 		const int user = SDL_GameControllerAddMappingsFromFile((std::string(home) + "/.config/redbound/gamecontrollerdb.txt").c_str());

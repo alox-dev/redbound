@@ -25,8 +25,14 @@ static std::vector<std::string> searchDirs() {
 	if (const char* home = getenv("HOME")) dirs.push_back(std::string(home) + "/.config/redbound/lang/");
 #ifdef __ANDROID__
 	dirs.push_back("lang/");
-#elif defined(REDBOUND_LANG_DIR)
+#else
+	if (char* base = SDL_GetBasePath()) {
+		dirs.push_back(std::string(base) + "assets/lang/");
+		SDL_free(base);
+	}
+#ifdef REDBOUND_LANG_DIR
 	dirs.push_back(std::string(REDBOUND_LANG_DIR) + "/");
+#endif
 #endif
 	return dirs;
 }

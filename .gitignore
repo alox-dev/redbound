@@ -16,3 +16,9 @@ platforms/android/app/.cxx/
 platforms/android/local.properties
 platforms/android/app/src/main/res-icon-local/
 platforms/linux/icon-local/
+platforms/android/keystore.properties
+*.jks
+*.keystore
+dist/
+platforms/windows/icon-local/
+platforms/switch/icon-local/

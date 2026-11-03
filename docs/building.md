@@ -70,12 +70,52 @@ adb logcat -s Redbound SDL SDL/APP
 The APK bundles `assets/lang` and SDL_GameControllerDB. The Java side is SDL's `SDLActivity` plus
 `RedboundActivity`, which adds the document picker used to import the `.deb`.
 
+## Release builds
+
+Versions follow `MAJOR.MINOR.PATCH-alpha` while the project is in alpha (current: `0.1.0-alpha`). The number comes from
+`project(... VERSION ...)` in `CMakeLists.txt` and `versionName` in `platforms/android/app/build.gradle`; both must be
+updated together, and `versionCode` increased for every Android release. Artifacts are named
+`redbound-<version>-<platform>-<arch>`.
+
+### Linux
+
+```bash
+./scripts/package-linux.sh
+```
+
+Builds in Release mode into `build-release/` and creates `dist/redbound-<version>-linux-x86_64.tar.gz` with the
+executable, `assets/lang`, `gamecontrollerdb.txt`, the desktop entry, the icon (the local one when present), the
+license and a short README. The executable finds its assets next to itself, so the folder can live anywhere. It needs
+SDL2, OpenGL ES 2 and zlib from the system.
+
+### Android
+
+Create a signing key once and keep it outside the repository (losing it means future APKs cannot update installed
+ones):
+
+```bash
+mkdir -p ~/keys
+keytool -genkeypair -v -keystore ~/keys/redbound-release.jks -alias redbound -keyalg RSA -keysize 4096 -validity 10000
+```
+
+Copy `platforms/android/keystore.properties.example` to `platforms/android/keystore.properties` (ignored by git) and
+fill in the path and passwords. Then:
+
+```bash
+cd platforms/android
+./gradlew assembleRelease
+```
+
+The signed APK is `app/build/outputs/apk/release/redbound-<version>-android-arm64.apk`. Without
+`keystore.properties` the release build falls back to the debug key.
+
 ## App icons
 
 The default icons live in `platforms/android/app/src/main/res-icon/` and `platforms/linux/redbound.png`.
-`scripts/make-icons.sh image.png` (requires ImageMagick) generates local icons from any image into
-`platforms/android/app/src/main/res-icon-local/` and `platforms/linux/icon-local/`, which are ignored by git; when
-the local Android folder exists, the build uses it instead of the default icons.
+`scripts/make-icons.sh image.png` (requires ImageMagick) generates local icons from any image, ignored by git:
+Android launcher icons (`platforms/android/app/src/main/res-icon-local/`), a 256 px PNG for Linux
+(`platforms/linux/icon-local/`), a multi-size `.ico` for Windows (`platforms/windows/icon-local/`) and a 256x256
+JPEG for Switch (`platforms/switch/icon-local/`). Builds and packaging scripts use the local icons when present.
 
 ## Data locations
 

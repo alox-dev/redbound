@@ -19,5 +19,8 @@ for pair in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
   $IM "$RES/mipmap-$d/ic_launcher.png" \( +clone -alpha extract -fill black -colorize 100 -fill white -draw "circle $((s/2)),$((s/2)) $((s/2)),0" \) -alpha off -compose CopyOpacity -composite "$RES/mipmap-$d/ic_launcher_round.png"
 done
 $IM "$SRC" -background none -gravity center -resize 256x256 -extent 256x256 platforms/linux/icon-local/redbound.png
-echo "Icons written to $RES and platforms/linux/icon-local (not tracked by git)."
+mkdir -p platforms/windows/icon-local platforms/switch/icon-local
+$IM "$SRC" -background none -gravity center -resize 256x256 -extent 256x256 -define icon:auto-resize=256,128,64,48,32,16 platforms/windows/icon-local/redbound.ico
+$IM "$SRC" -background white -gravity center -resize 256x256 -extent 256x256 -flatten -quality 95 platforms/switch/icon-local/icon.jpg
+echo "Icons written to $RES and platforms/{linux,windows,switch}/icon-local (not tracked by git)."
 echo "Rebuild the APK to use them: cd platforms/android && ./gradlew assembleDebug"

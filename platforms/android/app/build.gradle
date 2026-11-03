@@ -2,6 +2,12 @@ plugins {
     id 'com.android.application'
 }
 
+def keystoreFile = rootProject.file('keystore.properties')
+def keystore = new Properties()
+if (keystoreFile.exists()) {
+    keystoreFile.withInputStream { keystore.load(it) }
+}
+
 android {
     namespace 'io.github.alox_dev.redbound'
     compileSdk 34
@@ -12,7 +18,7 @@ android {
         minSdk 30
         targetSdk 34
         versionCode 1
-        versionName '0.1'
+        versionName '0.1.0-alpha'
         ndk {
             abiFilters 'arm64-v8a'
         }
@@ -31,10 +37,27 @@ android {
         }
     }
 
+    signingConfigs {
+        release {
+            if (keystoreFile.exists()) {
+                storeFile rootProject.file(keystore['storeFile'])
+                storePassword keystore['storePassword']
+                keyAlias keystore['keyAlias']
+                keyPassword keystore['keyPassword']
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.debug
+            signingConfig keystoreFile.exists() ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "redbound-${variant.versionName}-android-arm64${variant.buildType.name == 'release' ? '' : '-' + variant.buildType.name}.apk"
         }
     }
 
