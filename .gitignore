@@ -1,0 +1,18 @@
+build*/
+third_party/ka3d/
+# Never commit files from the original game
+*.deb
+original/
+data/
+*.hgr
+*.pvr
+*.mp3
+*.wav
+decomp/
+third_party/SDL2/
+platforms/android/.gradle/
+platforms/android/app/build/
+platforms/android/app/.cxx/
+platforms/android/local.properties
+platforms/android/app/src/main/res-icon-local/
+platforms/linux/icon-local/

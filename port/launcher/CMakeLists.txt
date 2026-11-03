@@ -1,0 +1,12 @@
+find_package(ZLIB REQUIRED)
+add_library(redbound_launcher STATIC DebImport.cpp Sha256.cpp)
+target_include_directories(redbound_launcher PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(redbound_launcher PROPERTIES CXX_STANDARD 17)
+target_link_libraries(redbound_launcher PUBLIC ZLIB::ZLIB)
+
+if(REDBOUND_TOOLS)
+add_executable(test_deb_import tests/test_deb_import.cpp)
+set_target_properties(test_deb_import PROPERTIES CXX_STANDARD 17)
+target_link_libraries(test_deb_import redbound_launcher)
+add_test(NAME deb_import COMMAND test_deb_import ${CMAKE_CURRENT_BINARY_DIR})
+endif()

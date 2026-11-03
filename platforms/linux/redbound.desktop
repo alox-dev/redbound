@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Redbound
+Comment=Source port of the Nokia N900 tech demo Bounce Evolution
+Exec=redbound
+Icon=redbound
+Terminal=false
+Categories=Game;ArcadeGame;
+Keywords=bounce;ball;n900;port;

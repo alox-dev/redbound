@@ -1,0 +1,93 @@
+# Redbound port menu: English
+# Format: key = text. Copy this file to add a language and list its code in "languages".
+language.name = English
+
+tab.game = Game
+tab.controls = Controls
+tab.graphics = Graphics
+tab.audio = Audio
+tab.improvements = Improvements
+button.continue = Continue
+button.quit_game = Quit game
+button.quit = Quit
+
+game.welcome = Welcome. To play you need your own copy of the original game: the Bounce Evolution package for the Nokia N900 (.deb). This port includes nothing from the game; it only extracts the data from your package.
+game.data_dir = Game data: %s
+game.data_ok = Imported and complete.
+game.data_missing = Not imported yet.
+game.notice = This port includes nothing from the original game: it is imported from your own Nokia N900 package (.deb).
+game.choose_deb = Choose the .deb...
+game.import_another = Import another .deb...
+game.picker_title = Choose the Bounce Evolution .deb
+game.picker_waiting = Choose the file in the Android picker...
+game.picker_failed = Could not open the file picker.
+game.nothing_chosen = No file was chosen.
+game.no_picker = No file was chosen (requires zenity or kdialog, or use --import-deb in a terminal).
+game.importing = Importing...
+game.imported = Imported: %d files.
+game.restart_needed = Restart the game to use them.
+game.import_failed = Could not import %s: %s
+game.copy_by_usb = Or copy the .deb over USB to: %s
+game.language = Language
+game.language_auto = Automatic (system)
+
+controls.scheme = Movement scheme
+controls.scheme_auto = Automatic (follows what you last used)
+controls.scheme_classic = Classic (tank): turn and move forward
+controls.scheme_modern = Modern: relative to the camera
+controls.scheme_help = Automatic: the d-pad and the keyboard use the classic scheme; the sticks or moving the camera with the mouse (right button) switch to the modern one.
+controls.camera_sensitivity = Camera sensitivity
+controls.invert_y = Invert the camera's vertical axis
+controls.deadzone = Stick dead zone
+controls.connected = Connected controllers
+controls.none_connected = None (Xbox, Switch Pro, Joy-Con, PlayStation and generic controllers are detected when connected).
+controls.mapping = Mapping
+controls.row_keyboard = Keyboard
+controls.row_keyboard_text = W/S or arrows move forward and back, A/D turn; numeric keypad 8/2/4/6. Jump: Space, 5, 0
+controls.row_mouse = Mouse
+controls.row_mouse_text = Dragging with the right button rotates the camera (modern scheme)
+controls.row_dpad = Controller: d-pad
+controls.row_dpad_text = Classic: move and turn, the camera follows Bounce
+controls.row_sticks = Controller: sticks
+controls.row_sticks_text = Left moves (relative to the camera), right rotates the camera
+controls.row_buttons = Controller: buttons
+controls.row_buttons_text = Jump: A or B. Pause: Start/+. This menu: Back/View/-
+controls.row_pause = Game pause
+controls.row_pause_text = P, Start or the top left corner
+controls.row_menu = This menu
+controls.row_menu_text = Esc, Back/View/- or a three finger tap
+controls.touch = Touch screen
+controls.touch_gestures = Gestures: the left half is a stick to move and the right half a stick to look around, double tap to jump, top left corner pauses
+controls.touch_swap_sides = Swap sides (move on the right, look on the left)
+controls.touch_accelerometer = Accelerometer (like the N900): tilt moves, shake jumps, tap pauses
+controls.tilt_sensitivity = Tilt sensitivity
+controls.tilt_invert_x = Invert sideways tilt
+controls.tilt_invert_y = Invert forward/back tilt
+controls.tilt_camera_follow = Camera: follows the path (tilting sideways while moving forward turns gently)
+controls.tilt_camera_fixed = Camera: fixed (only follows Bounce's position)
+controls.calibrate = Use the current position as neutral (also taken automatically at the start and when resuming)
+controls.calibrated = Neutral position set.
+controls.vibration = Vibration (phone and controllers)
+
+graphics.vsync = Vertical sync (VSync)
+graphics.fullscreen = Fullscreen
+graphics.resolution = Current resolution: %d x %d
+
+audio.mute = Mute
+audio.volume = Volume
+
+improvements.intro = Changes made by the port compared to the original. They apply when the level is loaded again.
+improvements.visible_sections = Level sections always visible
+improvements.visible_sections_help = The N900 hid parts of the level to save memory.
+
+game.unknown_version = Unknown package version (SHA-256 %s). It may not work correctly.
+
+tab.about = About
+about.description = A source port of Bounce Evolution, the 2009 tech demo for the Nokia N900, to modern devices.
+about.developed = Developed by Alox with the help of Claude (Anthropic): the code was written with AI assistance and reviewed, tested and maintained by Alox.
+about.original = Bounce Evolution was developed by Rovio Mobile and published by Nokia in 2009. Bounce is a trademark of Nokia.
+about.not_affiliated = Redbound is not affiliated with or endorsed by Nokia or Rovio, and it contains no data from the original game: you need your own copy of the original package.
+about.libraries = Libraries
+about.license = License: GNU General Public License v2.
+about.source = Source code: https://github.com/alox-dev/redbound
+about.support = Support the project: https://ko-fi.com/aloxdev

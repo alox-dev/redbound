@@ -1,0 +1,59 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'io.github.alox_dev.redbound'
+    compileSdk 34
+    ndkVersion '26.1.10909125'
+
+    defaultConfig {
+        applicationId 'io.github.alox_dev.redbound'
+        minSdk 30
+        targetSdk 34
+        versionCode 1
+        versionName '0.1'
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+        externalNativeBuild {
+            cmake {
+                arguments '-DANDROID_STL=c++_shared', '-DREDBOUND_TOOLS=OFF', '-DREDBOUND_ASAN=OFF'
+                cppFlags '-fexceptions', '-frtti'
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path '../../../CMakeLists.txt'
+            version '3.22.1'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main {
+            java.srcDirs = ['src/main/java', '../../../third_party/SDL2/android-project/app/src/main/java']
+            assets.srcDirs = ['src/main/assets', '../../../third_party/gamecontrollerdb', '../../../assets']
+            res.srcDirs = ['src/main/res', file('src/main/res-icon-local').exists() ? 'src/main/res-icon-local' : 'src/main/res-icon']
+        }
+    }
+}

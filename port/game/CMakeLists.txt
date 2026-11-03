@@ -1,0 +1,4 @@
+add_library(redbound_world STATIC SceneWorld.cpp BallController.cpp)
+target_include_directories(redbound_world PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(redbound_world PROPERTIES CXX_STANDARD 17 CXX_EXTENSIONS ON)
+target_link_libraries(redbound_world PUBLIC redbound_game ka3d_core)

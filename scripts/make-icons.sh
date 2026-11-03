@@ -1,0 +1,23 @@
+#!/bin/sh
+set -e
+if [ -z "$1" ] || [ ! -f "$1" ]; then
+  echo "usage: scripts/make-icons.sh image.png"
+  echo "Generates local app icons (ignored by git) from any image."
+  exit 1
+fi
+if command -v magick >/dev/null 2>&1; then IM="magick"; elif command -v convert >/dev/null 2>&1; then IM="convert"; else
+  echo "ImageMagick is required (sudo apt install imagemagick)"; exit 1
+fi
+cd "$(dirname "$0")/.."
+SRC="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+RES=platforms/android/app/src/main/res-icon-local
+mkdir -p platforms/linux/icon-local
+for pair in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
+  d=${pair%%:*}; s=${pair##*:}
+  mkdir -p "$RES/mipmap-$d"
+  $IM "$SRC" -background none -gravity center -resize "${s}x${s}" -extent "${s}x${s}" "$RES/mipmap-$d/ic_launcher.png"
+  $IM "$RES/mipmap-$d/ic_launcher.png" \( +clone -alpha extract -fill black -colorize 100 -fill white -draw "circle $((s/2)),$((s/2)) $((s/2)),0" \) -alpha off -compose CopyOpacity -composite "$RES/mipmap-$d/ic_launcher_round.png"
+done
+$IM "$SRC" -background none -gravity center -resize 256x256 -extent 256x256 platforms/linux/icon-local/redbound.png
+echo "Icons written to $RES and platforms/linux/icon-local (not tracked by git)."
+echo "Rebuild the APK to use them: cd platforms/android && ./gradlew assembleDebug"
