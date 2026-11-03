@@ -15,10 +15,10 @@ platform adds its own project or packaging under `platforms/`.
 ## Linux
 
 Requirements: CMake 3.16 or newer, GCC or Clang with C++17, Ninja (optional), git, SDL2, OpenGL ES 2 and zlib
-development packages. On Debian and Ubuntu:
+development packages (plus ImageMagick for icons and desktop-file-utils for the AppImage). On Debian and Ubuntu:
 
 ```bash
-sudo apt install build-essential cmake ninja-build git libsdl2-dev libgles2-mesa-dev zlib1g-dev
+sudo apt install build-essential cmake ninja-build git libsdl2-dev libgles2-mesa-dev zlib1g-dev imagemagick desktop-file-utils
 ```
 
 Build, test and run:
@@ -72,21 +72,25 @@ The APK bundles `assets/lang` and SDL_GameControllerDB. The Java side is SDL's `
 
 ## Release builds
 
-Versions follow `MAJOR.MINOR.PATCH-alpha` while the project is in alpha (current: `0.1.0-alpha`). The number comes from
+Versions follow semantic versioning, `MAJOR.MINOR.PATCH` (current: `1.0.0`). The number comes from
 `project(... VERSION ...)` in `CMakeLists.txt` and `versionName` in `platforms/android/app/build.gradle`; both must be
 updated together, and `versionCode` increased for every Android release. Artifacts are named
 `redbound-<version>-<platform>-<arch>`.
 
-### Linux
+### Linux (AppImage)
 
 ```bash
+sudo apt install desktop-file-utils
 ./scripts/package-linux.sh
 ```
 
-Builds in Release mode into `build-release/` and creates `dist/redbound-<version>-linux-x86_64.tar.gz` with the
-executable, `assets/lang`, `gamecontrollerdb.txt`, the desktop entry, the icon (the local one when present), the
-license and a short README. The executable finds its assets next to itself, so the folder can live anywhere. It needs
-SDL2, OpenGL ES 2 and zlib from the system.
+Builds in Release mode into `build-release/` and creates `dist/redbound-<version>-linux-x86_64.AppImage`, a single
+executable file that runs on most distributions. It bundles the game, SDL2, `assets/lang`, `gamecontrollerdb.txt`,
+the desktop entry and the icon (the local one when present); OpenGL ES 2 / EGL and zlib come from the system, as GPU
+drivers must. The script downloads appimagetool 1.9.0 into `dist/tools/` and verifies its SHA-256 before using it.
+
+Layout inside the AppImage: `AppRun` sets `LD_LIBRARY_PATH` to `usr/lib` and starts `usr/bin/redbound`, which finds
+its assets next to itself (`usr/bin/assets/lang`, `usr/bin/gamecontrollerdb.txt`).
 
 ### Android
 
@@ -112,7 +116,8 @@ The signed APK is `app/build/outputs/apk/release/redbound-<version>-android-arm6
 ## App icons
 
 The default icons live in `platforms/android/app/src/main/res-icon/` and `platforms/linux/redbound.png`.
-`scripts/make-icons.sh image.png` (requires ImageMagick) generates local icons from any image, ignored by git:
+`scripts/make-icons.sh [image.png]` (requires ImageMagick; default source `assets/icons/icon.png`) generates local
+icons, ignored by git:
 Android launcher icons (`platforms/android/app/src/main/res-icon-local/`), a 256 px PNG for Linux
 (`platforms/linux/icon-local/`), a multi-size `.ico` for Windows (`platforms/windows/icon-local/`) and a 256x256
 JPEG for Switch (`platforms/switch/icon-local/`). Builds and packaging scripts use the local icons when present.

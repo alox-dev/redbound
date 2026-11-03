@@ -1,15 +1,16 @@
 #!/bin/sh
 set -e
-if [ -z "$1" ] || [ ! -f "$1" ]; then
-  echo "usage: scripts/make-icons.sh image.png"
+if [ -n "$1" ] && [ -f "$1" ]; then SRC="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"; fi
+cd "$(dirname "$0")/.."
+SRC="${SRC:-assets/icons/icon.png}"
+if [ ! -f "$SRC" ]; then
+  echo "usage: scripts/make-icons.sh [image.png]   (default: assets/icons/icon.png)"
   echo "Generates local app icons (ignored by git) from any image."
   exit 1
 fi
 if command -v magick >/dev/null 2>&1; then IM="magick"; elif command -v convert >/dev/null 2>&1; then IM="convert"; else
   echo "ImageMagick is required (sudo apt install imagemagick)"; exit 1
 fi
-cd "$(dirname "$0")/.."
-SRC="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 RES=platforms/android/app/src/main/res-icon-local
 mkdir -p platforms/linux/icon-local
 for pair in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do

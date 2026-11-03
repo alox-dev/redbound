@@ -67,7 +67,9 @@ The AI involvement is stated openly here and in the in-game About screen.
    ```
 
    Other versions are imported too, with a warning that they may not work correctly.
-2. Install Redbound for your platform (see the releases page, or build it yourself as described below).
+2. Download Redbound for your platform from the [releases page](https://github.com/alox-dev/redbound/releases):
+   the `.AppImage` for Linux (make it executable with `chmod +x` and open it) or the `.apk` for Android. You can
+   also build it yourself as described below.
 3. Start Redbound. The import screen opens: choose your `.deb`. On Android you can also copy it to
    `Android/data/io.github.alox_dev.redbound/files` over USB.
 4. Play. The demo starts; tap, click or press Start to open the main menu and pick a level.
