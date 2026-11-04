@@ -1,4 +1,5 @@
 #include "Config.h"
+#include "Paths.h"
 #include <cstdio>
 #include <cstdlib>
 #include <sys/stat.h>
@@ -7,11 +8,7 @@ namespace redbound {
 
 Config& Config::get() { static Config c; return c; }
 
-std::string Config::path() const {
-	const char* x = getenv("XDG_CONFIG_HOME");
-	const char* home = getenv("HOME");
-	return (x && *x ? std::string(x) : std::string(home ? home : ".") + "/.config") + "/redbound/config.ini";
-}
+std::string Config::path() const { return userConfigDir() + "/config.ini"; }
 
 void Config::load() {
 	FILE* f = fopen(path().c_str(), "r");
@@ -29,10 +26,7 @@ void Config::load() {
 
 void Config::save() const {
 	const std::string p = path();
-	const std::string dir = p.substr(0, p.find_last_of('/'));
-	std::string cur;
-	for (char c : dir) { cur += c; if (c == '/') mkdir(cur.c_str(), 0755); }
-	mkdir(dir.c_str(), 0755);
+	makeDirectories(p.substr(0, p.find_last_of('/')));
 	FILE* f = fopen(p.c_str(), "w");
 	if (!f) return;
 	fprintf(f, "# Redbound settings\n");
@@ -50,8 +44,7 @@ void Config::applyToEnvironment() const {
 		{ "improvements.visible_sections", "REDBOUND_ORIGINAL_SECTIONS" },
 	};
 	for (auto& m : map) {
-		if (flag(m[0], true)) unsetenv(m[1]);
-		else setenv(m[1], "1", 1);
+		setEnvironment(m[1], flag(m[0], true) ? nullptr : "1");
 	}
 }
 

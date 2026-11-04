@@ -6,17 +6,24 @@ button, a three finger tap or the Android Back button, and pauses the game while
 
 ## Sections
 
+Every tab uses the same layout: titled sections with the option on the left and its control on the right, without
+help texts.
+
 | Section | Contents | Configuration keys |
 | --- | --- | --- |
-| Game | Game data folder and status, import another `.deb`, language | `general.language` |
-| Controls | Movement scheme, camera sensitivity, invert Y, stick dead zone, connected controllers, mapping table, touch scheme, tilt sensitivity and inversion, tilt camera, recalibration, vibration | `controls.*` |
-| Graphics | Vertical sync, fullscreen, current resolution | `graphics.vsync`, `graphics.fullscreen` |
+| Game | Game data status and folder, import another `.deb`, language | `general.language` |
+| Controls | Camera sensitivity and vertical inversion; controller dead zone, vibration and connected controllers; on touch devices, the experimental accelerometer and its options | `controls.*` |
+| Graphics | Fullscreen, vertical sync, current resolution | `graphics.vsync`, `graphics.fullscreen` |
 | Audio | Mute, volume | `audio.mute`, `audio.volume` |
-| Improvements | Level sections always visible | `improvements.visible_sections` |
-| About | Version, credits, libraries and licenses | |
+| Improvements | Show the whole level | `improvements.visible_sections` |
+| About | Title, version, credits, community links (Discord, GitHub, YouTube, Ko-fi), original game, libraries, license | |
 
-On first run, without game data, the menu opens in import mode: only the Game section matters and there is no
-Continue button until a valid package has been imported.
+On first run, without game data, the menu shows the import screen instead of the tabs: the title, one line, the
+button to choose the `.deb` and the language.
+
+The title image is `assets/title/title.png` (shipped next to the executable, or inside the APK). Images wider than
+1100 px are halved when loaded, so the texture stays within the 2048 px limit of older GPUs; without the file the
+name is shown as text.
 
 ## Layout
 
@@ -36,12 +43,10 @@ font is taken from the system (fontconfig on Linux, Roboto or Noto on Android) s
 | `graphics.vsync`, `graphics.fullscreen` | `1` / `0` |
 | `audio.mute` | `1` / `0` |
 | `audio.volume` | `0` to `1` |
-| `controls.scheme` | `auto`, `classic`, `modern` |
 | `controls.camera_sensitivity` | `0.3` to `3` |
 | `controls.invert_y` | `1` / `0` |
 | `controls.deadzone` | `0.05` to `0.5` |
-| `controls.touch` | `gestures`, `accelerometer` |
-| `controls.touch_swap_sides` | `1` / `0` |
+| `controls.accelerometer` | `1` / `0` (experimental, off by default) |
 | `controls.tilt_sensitivity` | `0.4` to `2.5` |
 | `controls.tilt_invert_x`, `controls.tilt_invert_y` | `1` / `0` |
 | `controls.tilt_camera` | `follow`, `fixed` |

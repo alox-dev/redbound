@@ -1,4 +1,5 @@
 #include "FileUtils.h"
+#include "Paths.h"
 #include <cctype>
 #include <sys/stat.h>
 
@@ -33,13 +34,5 @@ bool endsWith(const std::string& s, const std::string& suffix) {
 	return s.size() >= suffix.size() && s.compare(s.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
-void makeDirectories(const std::string& path) {
-	std::string current;
-	for (char c : path) {
-		current += c;
-		if (c == '/') mkdir(current.c_str(), 0755);
-	}
-	mkdir(path.c_str(), 0755);
-}
 
 }

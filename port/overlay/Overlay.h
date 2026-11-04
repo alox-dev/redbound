@@ -34,6 +34,12 @@ private:
 	void drawImprovements();
 	void drawLanguage();
 	void drawAbout();
+	void drawImport();
+	void drawImportButton(bool ok);
+	void loadTitle();
+	void drawTitle(float maxWidth);
+	unsigned int m_titleTex = 0;
+	int m_titleW = 0, m_titleH = 0;
 	float m_scale = 1.f;
 	bool m_compact = false;
 	void layout();

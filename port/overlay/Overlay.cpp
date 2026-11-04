@@ -10,9 +10,19 @@
 #include "backends/imgui_impl_sdl2.h"
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
+#ifdef _WIN32
+#include <windows.h>
+#include <commdlg.h>
+#endif
 #include <cmath>
 #include <algorithm>
 #include <sys/stat.h>
+#include <vector>
+#include <cfloat>
+#include <cstdint>
+#include <GLES2/gl2.h>
+#include "stb_image.h"
 
 namespace redbound {
 
@@ -20,7 +30,12 @@ static bool exists(const std::string& p) { struct stat st; return stat(p.c_str()
 
 static std::string findFont() {
 	if (const char* f = getenv("REDBOUND_FONT")) return f;
-#ifdef __ANDROID__
+#ifdef _WIN32
+	const std::string windir = getenv("WINDIR") ? getenv("WINDIR") : "C:\\Windows";
+	const std::string fonts[] = { windir + "\\Fonts\\segoeui.ttf", windir + "\\Fonts\\arial.ttf", windir + "\\Fonts\\tahoma.ttf" };
+	for (const std::string& f : fonts) if (exists(f)) return f;
+	return "";
+#elif defined(__ANDROID__)
 	const char* fonts[] = { "/system/fonts/Roboto-Regular.ttf", "/system/fonts/NotoSans-Regular.ttf", "/system/fonts/SamsungOneUI-Regular.ttf",
 	                        "/system/fonts/SECRobotoLight-Regular.ttf", "/system/fonts/DroidSans.ttf" };
 	for (const char* f : fonts) if (exists(f)) return f;
@@ -41,7 +56,18 @@ static std::string findFont() {
 }
 
 static std::string pickDeb() {
-#ifdef __ANDROID__
+#ifdef _WIN32
+	char path[MAX_PATH] = "";
+	OPENFILENAMEA ofn;
+	memset(&ofn, 0, sizeof(ofn));
+	ofn.lStructSize = sizeof(ofn);
+	ofn.lpstrFilter = "Bounce Evolution package (*.deb)\0*.deb\0All files (*.*)\0*.*\0";
+	ofn.lpstrFile = path;
+	ofn.nMaxFile = sizeof(path);
+	ofn.lpstrTitle = tr("game.picker_title");
+	ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+	return GetOpenFileNameA(&ofn) ? std::string(path) : std::string();
+#elif defined(__ANDROID__)
 	return "";
 #else
 	const std::string commands[] = { std::string("zenity --file-selection --title='") + tr("game.picker_title") + "' --file-filter='*.deb' 2>/dev/null",
@@ -107,6 +133,7 @@ bool Overlay::init(SDL_Window* win, SDL_GLContext ctx) {
 	}
 	if (!ImGui_ImplSDL2_InitForOpenGL(win, ctx)) return false;
 	if (!ImGui_ImplOpenGL3_Init("#version 100")) return false;
+	loadTitle();
 	m_ready = true;
 	Strings::get().load(Config::get().str("general.language", "auto"));
 	printf("port menu: ready (Esc, Back/View/- or a three finger tap), %.0f dpi, font %.0f px%s%s, language %s\n", ddpi, fontPx,
@@ -115,6 +142,11 @@ bool Overlay::init(SDL_Window* win, SDL_GLContext ctx) {
 }
 
 void Overlay::shutdown() {
+	if (m_titleTex) {
+		GLuint tex = m_titleTex;
+		glDeleteTextures(1, &tex);
+		m_titleTex = 0;
+	}
 	if (!m_ready) return;
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplSDL2_Shutdown();
@@ -158,7 +190,9 @@ void Overlay::draw() {
 		ImGui::EndChild();
 	};
 	auto tab = [](const char* key, const char* id) { return std::string(tr(key)) + "###" + id; };
-	if (ImGui::BeginTabBar("tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
+	if (m_importMode) {
+		content([this] { drawImport(); });
+	} else if (ImGui::BeginTabBar("tabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
 		if (ImGui::BeginTabItem(tab("tab.game", "game").c_str())) { content([this] { drawGame(); }); ImGui::EndTabItem(); }
 		if (ImGui::BeginTabItem(tab("tab.controls", "controls").c_str())) { content([this] { drawControls(); }); ImGui::EndTabItem(); }
 		if (ImGui::BeginTabItem(tab("tab.graphics", "graphics").c_str())) { content([this] { drawGraphics(); }); ImGui::EndTabItem(); }
@@ -199,13 +233,146 @@ void Overlay::importFrom(const std::string& deb) {
 	else m_status = format(tr("game.import_failed"), deb.c_str(), r.error.c_str());
 }
 
+static const ImVec4 kAccent(0.95f, 0.35f, 0.30f, 1.f);
+
+static void section(const char* title) {
+	ImGui::Spacing();
+	ImGui::TextColored(kAccent, "%s", title);
+	ImGui::Separator();
+	ImGui::Spacing();
+}
+
+static bool beginRows(const char* id) {
+	if (!ImGui::BeginTable(id, 2, ImGuiTableFlags_SizingStretchProp)) return false;
+	ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthStretch, 0.45f);
+	ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch, 0.55f);
+	return true;
+}
+
+static void row(const char* label) {
+	ImGui::TableNextRow();
+	ImGui::TableSetColumnIndex(0);
+	ImGui::AlignTextToFramePadding();
+	ImGui::TextUnformatted(label);
+	ImGui::TableSetColumnIndex(1);
+	ImGui::SetNextItemWidth(-FLT_MIN);
+}
+
+static bool checkRow(const char* label, const char* key, bool fallback) {
+	Config& c = Config::get();
+	bool v = c.flag(key, fallback);
+	row(label);
+	ImGui::PushID(key);
+	const bool changed = ImGui::Checkbox("##v", &v);
+	ImGui::PopID();
+	if (changed) {
+		c.setFlag(key, v);
+		c.save();
+	}
+	return changed;
+}
+
+static bool sliderRow(const char* label, const char* key, float fallback, float lo, float hi, const char* fmt) {
+	Config& c = Config::get();
+	float v = c.num(key, fallback);
+	row(label);
+	ImGui::PushID(key);
+	const bool changed = ImGui::SliderFloat("##v", &v, lo, hi, fmt);
+	ImGui::PopID();
+	if (changed) {
+		c.setNum(key, v);
+		c.save();
+	}
+	return changed;
+}
+
+static void centered(float width) {
+	const float avail = ImGui::GetContentRegionAvail().x;
+	if (avail > width) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (avail - width) * 0.5f);
+}
+
+static void centeredText(const char* text, bool disabled = false) {
+	centered(ImGui::CalcTextSize(text).x);
+	if (disabled) ImGui::TextDisabled("%s", text);
+	else ImGui::TextUnformatted(text);
+}
+
+void Overlay::loadTitle() {
+	std::vector<std::string> paths;
+#ifdef __ANDROID__
+	paths.push_back("title/title.png");
+#else
+	if (char* base = SDL_GetBasePath()) {
+		paths.push_back(std::string(base) + "assets/title/title.png");
+		SDL_free(base);
+	}
+#ifdef REDBOUND_ASSETS_DIR
+	paths.push_back(std::string(REDBOUND_ASSETS_DIR) + "/title/title.png");
+#endif
+#endif
+	for (const std::string& path : paths) {
+		SDL_RWops* rw = SDL_RWFromFile(path.c_str(), "rb");
+		if (!rw) continue;
+		const Sint64 size = SDL_RWsize(rw);
+		std::vector<unsigned char> bytes(size > 0 ? (size_t)size : 0);
+		const bool read = size > 0 && SDL_RWread(rw, &bytes[0], 1, (size_t)size) == (size_t)size;
+		SDL_RWclose(rw);
+		if (!read) continue;
+		int w = 0, h = 0, n = 0;
+		unsigned char* pixels = stbi_load_from_memory(&bytes[0], (int)bytes.size(), &w, &h, &n, 4);
+		if (!pixels) continue;
+		std::vector<unsigned char> image(pixels, pixels + (size_t)w * h * 4);
+		stbi_image_free(pixels);
+		while (w > 1100 && w >= 2 && h >= 2) {
+			const int nw = w / 2, nh = h / 2;
+			std::vector<unsigned char> half((size_t)nw * nh * 4);
+			for (int y = 0; y < nh; ++y)
+				for (int x = 0; x < nw; ++x)
+					for (int ch = 0; ch < 4; ++ch) {
+						const auto at = [&](int xx, int yy) { return (int)image[((size_t)yy * w + xx) * 4 + ch]; };
+						half[((size_t)y * nw + x) * 4 + ch] = (unsigned char)((at(2 * x, 2 * y) + at(2 * x + 1, 2 * y) + at(2 * x, 2 * y + 1) + at(2 * x + 1, 2 * y + 1) + 2) / 4);
+					}
+			image.swap(half);
+			w = nw;
+			h = nh;
+		}
+		GLuint tex = 0;
+		glGenTextures(1, &tex);
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, &image[0]);
+		m_titleTex = tex;
+		m_titleW = w;
+		m_titleH = h;
+		return;
+	}
+}
+
+void Overlay::drawTitle(float maxWidth) {
+	if (!m_titleTex) {
+		ImGui::SetWindowFontScale(2.f);
+		centeredText("Redbound");
+		ImGui::SetWindowFontScale(1.f);
+		return;
+	}
+	const float width = std::min(maxWidth, ImGui::GetContentRegionAvail().x);
+	const float height = width * (float)m_titleH / (float)m_titleW;
+	centered(width);
+	ImGui::Image((ImTextureID)(intptr_t)m_titleTex, ImVec2(width, height));
+}
+
 void Overlay::drawLanguage() {
 	Config& c = Config::get();
 	const std::string selected = c.str("general.language", "auto");
 	const auto languages = Strings::get().available();
 	std::string preview = tr("game.language_auto");
 	for (const auto& l : languages) if (l.first == selected) preview = l.second;
-	if (ImGui::BeginCombo(tr("game.language"), preview.c_str())) {
+	row(tr("game.language"));
+	if (ImGui::BeginCombo("##language", preview.c_str())) {
 		if (ImGui::Selectable(tr("game.language_auto"), selected == "auto")) {
 			c.set("general.language", "auto");
 			c.save();
@@ -221,20 +388,12 @@ void Overlay::drawLanguage() {
 	}
 }
 
-void Overlay::drawGame() {
-	const std::string dir = defaultGameDir();
-	const bool ok = gameDataPresent(dir);
-	if (m_importMode) {
-		ImGui::TextWrapped("%s", tr("game.welcome"));
-		ImGui::Spacing();
-	}
-	ImGui::TextWrapped(tr("game.data_dir"), dir.c_str());
-	ImGui::TextColored(ok ? ImVec4(0.5f, 0.9f, 0.5f, 1) : ImVec4(1, 0.5f, 0.4f, 1), "%s", ok ? tr("game.data_ok") : tr("game.data_missing"));
-	ImGui::Spacing();
-	if (!m_importMode) ImGui::TextWrapped("%s", tr("game.notice"));
+void Overlay::drawImportButton(bool ok) {
 	const char* button = ok ? tr("game.import_another") : tr("game.choose_deb");
+	const float width = m_compact ? -FLT_MIN : std::max(ImGui::CalcTextSize(button).x + ImGui::GetStyle().FramePadding.x * 4.f, 260.f * m_scale);
+	if (!m_compact) centered(width);
 #ifdef __ANDROID__
-	if (ImGui::Button(button, ImVec2(m_compact ? -1.f : 0.f, 0))) {
+	if (ImGui::Button(button, ImVec2(width, 0))) {
 		m_waitPick = androidPickDeb();
 		m_status = m_waitPick ? tr("game.picker_waiting") : tr("game.picker_failed");
 	}
@@ -252,7 +411,6 @@ void Overlay::drawGame() {
 	}
 	const std::string external = androidExternalDir();
 	if (!ok && !external.empty()) {
-		ImGui::TextDisabled(tr("game.copy_by_usb"), external.c_str());
 		m_scanTimer -= ImGui::GetIO().DeltaTime;
 		if (m_scanTimer <= 0.f) {
 			m_scanTimer = 1.5f;
@@ -269,177 +427,209 @@ void Overlay::drawGame() {
 		}
 	}
 #else
-	if (ImGui::Button(button)) {
+	if (ImGui::Button(button, ImVec2(width, 0))) {
 		const std::string deb = pickDeb();
 		if (!deb.empty()) importFrom(deb);
 		else m_status = tr("game.no_picker");
 	}
 #endif
-	if (!m_status.empty()) ImGui::TextWrapped("%s", m_status.c_str());
-	ImGui::Separator();
-	drawLanguage();
+	if (!m_status.empty()) {
+		ImGui::Spacing();
+		ImGui::PushTextWrapPos(0.f);
+		centeredText(m_status.c_str(), true);
+		ImGui::PopTextWrapPos();
+	}
+}
+
+void Overlay::drawImport() {
+	const bool ok = gameDataPresent(defaultGameDir());
+	ImGui::Spacing();
+	drawTitle(520.f * m_scale);
+	ImGui::Spacing();
+	ImGui::Spacing();
+	centeredText(tr("game.welcome"));
+	ImGui::Spacing();
+	ImGui::Spacing();
+	drawImportButton(ok);
+#ifdef __ANDROID__
+	const std::string external = androidExternalDir();
+	if (!ok && !external.empty()) {
+		ImGui::Spacing();
+		ImGui::PushTextWrapPos(0.f);
+		ImGui::TextDisabled(tr("game.copy_by_usb"), external.c_str());
+		ImGui::PopTextWrapPos();
+	}
+#endif
+	ImGui::Spacing();
+	section(tr("game.section_language"));
+	if (beginRows("language")) {
+		drawLanguage();
+		ImGui::EndTable();
+	}
+}
+
+void Overlay::drawGame() {
+	const std::string dir = defaultGameDir();
+	const bool ok = gameDataPresent(dir);
+	section(tr("game.section_data"));
+	if (beginRows("data")) {
+		row(tr("game.status"));
+		ImGui::TextColored(ok ? ImVec4(0.5f, 0.9f, 0.5f, 1) : ImVec4(1, 0.5f, 0.4f, 1), "%s", ok ? tr("game.data_ok") : tr("game.data_missing"));
+		row(tr("game.folder"));
+		ImGui::PushTextWrapPos(0.f);
+		ImGui::TextDisabled("%s", dir.c_str());
+		ImGui::PopTextWrapPos();
+		ImGui::EndTable();
+	}
+	ImGui::Spacing();
+	drawImportButton(ok);
+	section(tr("game.section_language"));
+	if (beginRows("language")) {
+		drawLanguage();
+		ImGui::EndTable();
+	}
 }
 
 void Overlay::drawControls() {
 	Config& c = Config::get();
-	const char* keys[] = { "auto", "classic", "modern" };
-	const char* labels[] = { tr("controls.scheme_auto"), tr("controls.scheme_classic"), tr("controls.scheme_modern") };
-	const std::string cur = c.str("controls.scheme", "auto");
-	ImGui::TextUnformatted(tr("controls.scheme"));
-	for (int i = 0; i < 3; ++i)
-		if (ImGui::RadioButton(labels[i], cur == keys[i])) { c.set("controls.scheme", keys[i]); c.save(); }
-	ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
-	ImGui::TextWrapped("%s", tr("controls.scheme_help"));
-	ImGui::PopStyleColor();
-	ImGui::Separator();
-	float sens = c.num("controls.camera_sensitivity", 1.f);
-	if (ImGui::SliderFloat(tr("controls.camera_sensitivity"), &sens, 0.3f, 3.f, "%.1f")) { c.setNum("controls.camera_sensitivity", sens); c.save(); }
-	bool inv = c.flag("controls.invert_y", false);
-	if (ImGui::Checkbox(tr("controls.invert_y"), &inv)) { c.setFlag("controls.invert_y", inv); c.save(); }
-	float dz = c.num("controls.deadzone", 0.22f);
-	if (ImGui::SliderFloat(tr("controls.deadzone"), &dz, 0.05f, 0.5f, "%.2f")) { c.setNum("controls.deadzone", dz); c.save(); }
-	ImGui::Separator();
-	ImGui::TextUnformatted(tr("controls.connected"));
-	int n = 0;
-	for (int i = 0; i < SDL_NumJoysticks(); ++i)
-		if (SDL_IsGameController(i)) { ImGui::BulletText("%s", SDL_GameControllerNameForIndex(i)); ++n; }
-	if (!n) ImGui::TextDisabled("%s", tr("controls.none_connected"));
-	ImGui::Separator();
-	ImGui::TextUnformatted(tr("controls.mapping"));
-	if (ImGui::BeginTable("mapping", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-		const char* rows[][2] = {
-			{ "controls.row_keyboard", "controls.row_keyboard_text" },
-			{ "controls.row_mouse", "controls.row_mouse_text" },
-			{ "controls.row_dpad", "controls.row_dpad_text" },
-			{ "controls.row_sticks", "controls.row_sticks_text" },
-			{ "controls.row_buttons", "controls.row_buttons_text" },
-			{ "controls.row_pause", "controls.row_pause_text" },
-			{ "controls.row_menu", "controls.row_menu_text" },
-		};
-
-		for (auto& r : rows) {
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::TextUnformatted(tr(r[0]));
-			ImGui::TableSetColumnIndex(1);
-			ImGui::TextWrapped("%s", tr(r[1]));
+	section(tr("controls.section_camera"));
+	if (beginRows("camera")) {
+		sliderRow(tr("controls.camera_sensitivity"), "controls.camera_sensitivity", 1.f, 0.3f, 3.f, "%.1f");
+		checkRow(tr("controls.invert_y"), "controls.invert_y", false);
+		ImGui::EndTable();
+	}
+	section(tr("controls.section_controllers"));
+	if (beginRows("controllers")) {
+		sliderRow(tr("controls.deadzone"), "controls.deadzone", 0.22f, 0.05f, 0.5f, "%.2f");
+		checkRow(tr("controls.vibration"), "controls.vibration", true);
+		row(tr("controls.connected"));
+		int n = 0;
+		for (int i = 0; i < SDL_NumJoysticks(); ++i)
+			if (SDL_IsGameController(i)) {
+				ImGui::TextUnformatted(SDL_GameControllerNameForIndex(i));
+				++n;
+			}
+		if (!n) ImGui::TextDisabled("%s", tr("controls.none_connected"));
+		ImGui::EndTable();
+	}
+#ifndef __ANDROID__
+	if (SDL_GetNumTouchDevices() == 0) return;
+#endif
+	section(tr("controls.section_touch"));
+	if (beginRows("touch")) {
+		checkRow(tr("controls.accelerometer"), "controls.accelerometer", false);
+		if (c.flag("controls.accelerometer", false)) {
+			sliderRow(tr("controls.tilt_sensitivity"), "controls.tilt_sensitivity", 1.f, 0.4f, 2.5f, "%.1f");
+			checkRow(tr("controls.tilt_invert_x"), "controls.tilt_invert_x", false);
+			checkRow(tr("controls.tilt_invert_y"), "controls.tilt_invert_y", false);
+			const std::string cam = c.str("controls.tilt_camera", "follow");
+			row(tr("controls.tilt_camera"));
+			if (ImGui::BeginCombo("##tilt_camera", cam == "fixed" ? tr("controls.tilt_camera_fixed") : tr("controls.tilt_camera_follow"))) {
+				if (ImGui::Selectable(tr("controls.tilt_camera_follow"), cam != "fixed")) { c.set("controls.tilt_camera", "follow"); c.save(); }
+				if (ImGui::Selectable(tr("controls.tilt_camera_fixed"), cam == "fixed")) { c.set("controls.tilt_camera", "fixed"); c.save(); }
+				ImGui::EndCombo();
+			}
+			row("");
+			if (ImGui::Button(tr("controls.calibrate"), ImVec2(-FLT_MIN, 0)) && onCalibrate) {
+				onCalibrate();
+				m_status = tr("controls.calibrated");
+			}
 		}
 		ImGui::EndTable();
 	}
-	ImGui::Separator();
-	ImGui::TextUnformatted(tr("controls.touch"));
-	const std::string ts = c.str("controls.touch", "gestures");
-	if (ImGui::RadioButton(tr("controls.touch_gestures"), ts == "gestures")) { c.set("controls.touch", "gestures"); c.save(); }
-	if (ImGui::RadioButton(tr("controls.touch_accelerometer"), ts == "accelerometer")) { c.set("controls.touch", "accelerometer"); c.save(); }
-	if (ts == "gestures") {
-		bool swapped = c.flag("controls.touch_swap_sides", false);
-		if (ImGui::Checkbox(tr("controls.touch_swap_sides"), &swapped)) {
-			c.setFlag("controls.touch_swap_sides", swapped);
-			c.save();
-		}
-	}
-	if (ts == "accelerometer") {
-		float ts2 = c.num("controls.tilt_sensitivity", 1.f);
-		if (ImGui::SliderFloat(tr("controls.tilt_sensitivity"), &ts2, 0.4f, 2.5f, "%.1f")) { c.setNum("controls.tilt_sensitivity", ts2); c.save(); }
-		bool ix = c.flag("controls.tilt_invert_x", false), iy = c.flag("controls.tilt_invert_y", false);
-		if (ImGui::Checkbox(tr("controls.tilt_invert_x"), &ix)) { c.setFlag("controls.tilt_invert_x", ix); c.save(); }
-		if (ImGui::Checkbox(tr("controls.tilt_invert_y"), &iy)) { c.setFlag("controls.tilt_invert_y", iy); c.save(); }
-		const std::string ac = c.str("controls.tilt_camera", "follow");
-		if (ImGui::RadioButton(tr("controls.tilt_camera_follow"), ac == "follow")) { c.set("controls.tilt_camera", "follow"); c.save(); }
-		if (ImGui::RadioButton(tr("controls.tilt_camera_fixed"), ac == "fixed")) { c.set("controls.tilt_camera", "fixed"); c.save(); }
-		if (ImGui::Button(tr("controls.calibrate")) && onCalibrate) { onCalibrate(); m_status = tr("controls.calibrated"); }
-	}
-	bool vib = c.flag("controls.vibration", true);
-	if (ImGui::Checkbox(tr("controls.vibration"), &vib)) { c.setFlag("controls.vibration", vib); c.save(); }
 }
 
 void Overlay::drawGraphics() {
 	Config& c = Config::get();
-	bool vsync = c.flag("graphics.vsync", true);
-	if (ImGui::Checkbox(tr("graphics.vsync"), &vsync)) {
-		c.setFlag("graphics.vsync", vsync);
-		SDL_GL_SetSwapInterval(vsync ? 1 : 0);
-		c.save();
+	section(tr("graphics.section_display"));
+	if (beginRows("display")) {
+		bool full = (SDL_GetWindowFlags(m_win) & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0;
+		row(tr("graphics.fullscreen"));
+		if (ImGui::Checkbox("##fullscreen", &full)) {
+			SDL_SetWindowFullscreen(m_win, full ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+			c.setFlag("graphics.fullscreen", full);
+			c.save();
+		}
+		if (checkRow(tr("graphics.vsync"), "graphics.vsync", true)) SDL_GL_SetSwapInterval(c.flag("graphics.vsync", true) ? 1 : 0);
+		int w, h;
+		SDL_GL_GetDrawableSize(m_win, &w, &h);
+		row(tr("graphics.resolution"));
+		ImGui::TextDisabled("%d x %d", w, h);
+		ImGui::EndTable();
 	}
-	bool full = (SDL_GetWindowFlags(m_win) & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0;
-	if (ImGui::Checkbox(tr("graphics.fullscreen"), &full)) {
-		SDL_SetWindowFullscreen(m_win, full ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
-		c.setFlag("graphics.fullscreen", full);
-		c.save();
-	}
-	int w, h;
-	SDL_GL_GetDrawableSize(m_win, &w, &h);
-	ImGui::Text(tr("graphics.resolution"), w, h);
 }
 
 void Overlay::drawAudio() {
 	Config& c = Config::get();
-	bool muted = c.flag("audio.mute", false);
-	if (ImGui::Checkbox(tr("audio.mute"), &muted)) {
-		c.setFlag("audio.mute", muted);
-		if (m_audio) m_audio->setMuted(muted);
-		c.save();
-	}
-	float vol = c.num("audio.volume", 1.f);
-	if (ImGui::SliderFloat(tr("audio.volume"), &vol, 0.f, 1.f, "%.2f")) {
-		c.setNum("audio.volume", vol);
-		if (m_audio) m_audio->setMasterVolume(vol);
-		c.save();
+	section(tr("audio.section"));
+	if (beginRows("sound")) {
+		if (checkRow(tr("audio.mute"), "audio.mute", false) && m_audio) m_audio->setMuted(c.flag("audio.mute", false));
+		if (sliderRow(tr("audio.volume"), "audio.volume", 1.f, 0.f, 1.f, "%.2f") && m_audio) m_audio->setMasterVolume(c.num("audio.volume", 1.f));
+		ImGui::EndTable();
 	}
 }
 
 void Overlay::drawImprovements() {
-	Config& c = Config::get();
-	ImGui::TextWrapped("%s", tr("improvements.intro"));
-	ImGui::Spacing();
-	struct Item { const char* key; const char* label; const char* help; };
-	const Item items[] = {
-		{ "improvements.visible_sections", "improvements.visible_sections", "improvements.visible_sections_help" },
-	};
-	for (const Item& it : items) {
-		bool v = c.flag(it.key, true);
-		if (ImGui::Checkbox(tr(it.label), &v)) {
-			c.setFlag(it.key, v);
-			c.save();
-			c.applyToEnvironment();
-		}
-		ImGui::TextDisabled("%s", tr(it.help));
+	section(tr("improvements.section"));
+	if (beginRows("improvements")) {
+		if (checkRow(tr("improvements.visible_sections"), "improvements.visible_sections", true)) Config::get().applyToEnvironment();
+		ImGui::EndTable();
 	}
 }
 
 void Overlay::drawAbout() {
-	ImGui::Text("Redbound %s", REDBOUND_VERSION);
-	ImGui::TextWrapped("%s", tr("about.description"));
 	ImGui::Spacing();
-	ImGui::TextWrapped("%s", tr("about.developed"));
-	ImGui::TextWrapped("%s", tr("about.original"));
-	ImGui::TextWrapped("%s", tr("about.not_affiliated"));
-	ImGui::Separator();
-	ImGui::TextUnformatted(tr("about.libraries"));
-	if (ImGui::BeginTable("libraries", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
-		const char* rows[][2] = {
-			{ "KA3D (Jani Kajala)", "GPL v2" },
-			{ "SDL2", "zlib" },
-			{ "Dear ImGui", "MIT" },
-			{ "dr_libs (dr_wav, dr_mp3)", "Public domain / MIT-0" },
-			{ "stb_image", "Public domain / MIT" },
-			{ "PVRTC decompressor (Imagination Technologies)", "MIT" },
-			{ "SDL_GameControllerDB", "zlib" },
-			{ "zlib", "zlib" },
-		};
-		for (auto& r : rows) {
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::TextUnformatted(r[0]);
-			ImGui::TableSetColumnIndex(1);
-			ImGui::TextUnformatted(r[1]);
-		}
-		ImGui::EndTable();
+	drawTitle(420.f * m_scale);
+	ImGui::Spacing();
+	const std::string version = format(tr("about.version"), REDBOUND_VERSION);
+	centeredText(version.c_str(), true);
+	centeredText(tr("about.by"));
+	section(tr("about.section_community"));
+	struct Link { const char* label; const char* url; };
+	const Link links[] = {
+		{ "Discord", "https://discord.gg/WXe65ENvwq" },
+		{ "GitHub", "https://github.com/alox-dev/redbound" },
+		{ "YouTube", "https://www.youtube.com/@aloxdev" },
+		{ "Ko-fi", "https://ko-fi.com/aloxdev" },
+	};
+	const int perRow = m_compact && ImGui::GetContentRegionAvail().x < 520.f * m_scale ? 2 : 4;
+	const float spacing = ImGui::GetStyle().ItemSpacing.x;
+	const float bw = (ImGui::GetContentRegionAvail().x - spacing * (perRow - 1)) / perRow;
+	for (int i = 0; i < 4; ++i) {
+		if (i % perRow) ImGui::SameLine();
+		if (ImGui::Button(links[i].label, ImVec2(bw, 0))) SDL_OpenURL(links[i].url);
 	}
-	ImGui::Separator();
-	ImGui::TextWrapped("%s", tr("about.license"));
-	ImGui::TextWrapped("%s", tr("about.source"));
-	ImGui::TextWrapped("%s", tr("about.support"));
+	section(tr("about.section_original"));
+	ImGui::PushTextWrapPos(0.f);
+	ImGui::TextUnformatted(tr("about.original"));
+	ImGui::TextDisabled("%s", tr("about.not_affiliated"));
+	ImGui::PopTextWrapPos();
+	ImGui::Spacing();
+	if (ImGui::CollapsingHeader(tr("about.libraries"))) {
+		if (ImGui::BeginTable("libraries", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+			const char* rows[][2] = {
+				{ "KA3D (Jani Kajala)", "GPL v2" },
+				{ "SDL2", "zlib" },
+				{ "Dear ImGui", "MIT" },
+				{ "dr_libs", "MIT-0" },
+				{ "stb_image", "MIT" },
+				{ "PVRTC (Imagination Technologies)", "MIT" },
+				{ "SDL_GameControllerDB", "zlib" },
+				{ "zlib", "zlib" },
+				{ "ANGLE", "BSD" },
+			};
+			for (auto& r : rows) {
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextUnformatted(r[0]);
+				ImGui::TableSetColumnIndex(1);
+				ImGui::TextDisabled("%s", r[1]);
+			}
+			ImGui::EndTable();
+		}
+	}
+	ImGui::Spacing();
+	centeredText(tr("about.license"), true);
 }
 
 }

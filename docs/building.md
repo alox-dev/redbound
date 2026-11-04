@@ -41,6 +41,24 @@ ctest --test-dir build
 | `REDBOUND_TOOLS` | `ON` (`OFF` on Android) | Build `hgr-dump`, `pvr2png` and the unit tests |
 | `REDBOUND_ASAN` | `OFF` | Build with AddressSanitizer |
 
+## Windows
+
+Windows builds are cross compiled from Linux with MinGW-w64. Graphics use OpenGL ES 2 through ANGLE, which
+translates it to Direct3D 11, so the game runs on any GPU with Windows 10 or 11 drivers (NVIDIA, AMD or Intel,
+including integrated graphics) instead of depending on each vendor's OpenGL ES support.
+
+Requirements on Debian and Ubuntu:
+
+```bash
+sudo apt install mingw-w64 libz-mingw-w64-dev zip imagemagick
+```
+
+`scripts/setup-windows.sh` downloads the Windows dependencies into `third_party/windows/` (ignored by git): SDL2
+2.30.9 for MinGW, the ANGLE DLLs (`libEGL.dll`, `libGLESv2.dll`, `d3dcompiler_47.dll`, taken from the Electron
+33.2.1 release, which ships them prebuilt) and the Khronos OpenGL ES 2 headers. `cmake/mingw-w64.cmake` is the
+toolchain file. The C and C++ runtimes and zlib are linked statically; KA3D uses its portable GCC code path on
+MinGW.
+
 ## Android
 
 The Gradle project in `platforms/android/` (Gradle 8.7, Android Gradle plugin 8.5.2; Android Studio is not needed)
@@ -113,6 +131,18 @@ cd platforms/android
 The signed APK is `app/build/outputs/apk/release/redbound-<version>-android-arm64.apk`. Without
 `keystore.properties` the release build falls back to the debug key.
 
+### Windows
+
+```bash
+./scripts/package-windows.sh
+```
+
+Creates `dist/redbound-<version>-windows-x86_64.zip` with `redbound.exe` (a GUI application with the icon embedded,
+the local one when present), `SDL2.dll`, the ANGLE DLLs, `assets/lang`, `gamecontrollerdb.txt`, the license, the
+ANGLE and Chromium licenses and a short README. Settings and imported data live in `%APPDATA%\redbound`. If ANGLE
+cannot start on a machine, setting the environment variable `SDL_OPENGL_ES_DRIVER=0` makes SDL use the GPU driver's
+native OpenGL ES support instead.
+
 ## App icons
 
 The default icons live in `platforms/android/app/src/main/res-icon/` and `platforms/linux/redbound.png`.
@@ -126,8 +156,8 @@ JPEG for Switch (`platforms/switch/icon-local/`). Builds and packaging scripts u
 
 | | Linux | Android |
 | --- | --- | --- |
-| Imported game data | `$XDG_DATA_HOME/redbound` (`~/.local/share/redbound`) | app internal storage |
-| Settings (`config.ini`) | `$XDG_CONFIG_HOME/redbound` (`~/.config/redbound`) | app internal storage |
+| Imported game data | `$XDG_DATA_HOME/redbound` (`~/.local/share/redbound`); Windows: `%APPDATA%\redbound` | app internal storage |
+| Settings (`config.ini`) | `$XDG_CONFIG_HOME/redbound` (`~/.config/redbound`); Windows: `%APPDATA%\redbound` | app internal storage |
 | Level 2 records | next to the game data (`level2.scores`) | app internal storage |
 | Extra languages, controller mappings | `~/.config/redbound/lang/`, `~/.config/redbound/gamecontrollerdb.txt` | bundled |
 

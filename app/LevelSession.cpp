@@ -245,13 +245,10 @@ bool LevelSession::handlePauseEvent(const SDL_Event& e) {
 	if (!m_hasUi || !(m_options.menu || m_options.fromMenu) || m_menu.isOpen()) return false;
 	const bool clickPause = e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT &&
 	                        (!m_player || m_results || (e.button.x < m_app.width * 0.12f && e.button.y < m_app.height * 0.15f));
-	const bool touchPause = e.type == SDL_FINGERDOWN && m_player && !m_results && PlayerInput::touchScheme() == "accelerometer" &&
-	                        SDL_GetTicks() - m_menu.closedAt() > 300;
 	const bool keyPause = (e.type == SDL_KEYDOWN && (e.key.keysym.sym == SDLK_p || (m_results && e.key.keysym.sym == SDLK_RETURN))) ||
 	                      (e.type == SDL_CONTROLLERBUTTONDOWN &&
 	                       (e.cbutton.button == SDL_CONTROLLER_BUTTON_START || (m_results && e.cbutton.button == SDL_CONTROLLER_BUTTON_A)));
-	if (!clickPause && !touchPause && !keyPause) return false;
-	if (touchPause) m_menu.ignoreTouchClicksUntil(SDL_GetTicks() + 150);
+	if (!clickPause && !keyPause) return false;
 	m_menu.open();
 	if (!m_ui->hasCapture()) m_needCapture = true;
 	return true;
@@ -297,6 +294,21 @@ void LevelSession::handleEvents() {
 		if (Devices::instance().handleEvent(e)) continue;
 		if (m_app.overlay->processEvent(e)) continue;
 		if (m_player && !m_menu.isOpen() && !m_results) m_input.handleTouch(e, m_app.width, m_app.height);
+		if (e.type == SDL_CONTROLLERAXISMOTION && e.caxis.axis == SDL_CONTROLLER_AXIS_LEFTX && m_menu.isOpen()) {
+			const float v = e.caxis.value / 32767.f;
+			SDL_Keycode key = 0;
+			if (m_stickNav == 0 && v > 0.6f) { key = SDLK_RIGHT; m_stickNav = 1; }
+			else if (m_stickNav == 0 && v < -0.6f) { key = SDLK_LEFT; m_stickNav = -1; }
+			else if (std::fabs(v) < 0.3f) m_stickNav = 0;
+			if (key) {
+				SDL_Event k;
+				memset(&k, 0, sizeof(k));
+				k.type = SDL_KEYDOWN;
+				k.key.keysym.sym = key;
+				SDL_PushEvent(&k);
+			}
+			continue;
+		}
 		if (e.type == SDL_CONTROLLERBUTTONDOWN && m_menu.isOpen()) {
 			SDL_Keycode key = 0;
 			switch (e.cbutton.button) {
@@ -335,20 +347,34 @@ void LevelSession::handleEvents() {
 		} else if (e.type == SDL_KEYDOWN) {
 			if (e.key.keysym.sym == SDLK_m) m_audio->setMuted(!m_audio->muted());
 			else if (m_options.dev) handleDevKey(e.key.keysym.sym);
-		} else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_RIGHT) {
-			m_mouseLook = true;
-			SDL_SetRelativeMouseMode(SDL_TRUE);
-		} else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_RIGHT) {
-			m_mouseLook = false;
-			SDL_SetRelativeMouseMode(SDL_FALSE);
-		} else if (e.type == SDL_MOUSEMOTION && m_mouseLook) {
-			if (m_player && !m_freeFly) m_input.addMouseOrbit((float)e.motion.xrel, (float)e.motion.yrel);
-			else {
-				m_yaw += e.motion.xrel * 0.004f;
-				m_pitch -= e.motion.yrel * 0.004f;
+		} else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+			setMouseCapture(false);
+		} else if (e.type == SDL_MOUSEMOTION && e.motion.which != SDL_TOUCH_MOUSEID) {
+			if (m_mouseLook) {
+				if (m_player && !m_freeFly) m_input.addMouseOrbit((float)e.motion.xrel, (float)e.motion.yrel);
+				else {
+					m_yaw += e.motion.xrel * 0.004f;
+					m_pitch -= e.motion.yrel * 0.004f;
+				}
+			} else if (mouseCaptureAllowed()) {
+				m_mouseTravel += std::abs(e.motion.xrel) + std::abs(e.motion.yrel);
+				if (m_mouseTravel > 24) setMouseCapture(true);
 			}
 		}
 	}
+}
+
+bool LevelSession::mouseCaptureAllowed() const {
+	const bool focused = (SDL_GetWindowFlags(m_app.window) & SDL_WINDOW_INPUT_FOCUS) != 0;
+	return focused && (m_freeFly || (m_player && !m_results && !m_menu.isOpen() && !m_app.overlay->open()));
+}
+
+void LevelSession::setMouseCapture(bool capture) {
+	if (capture == m_mouseLook) return;
+	m_mouseLook = capture;
+	m_mouseTravel = 0;
+	SDL_SetRelativeMouseMode(capture ? SDL_TRUE : SDL_FALSE);
+	m_input.setMouseCaptured(capture);
 }
 
 void LevelSession::updateWorld(float dt) {
@@ -521,6 +547,7 @@ SessionResult LevelSession::run() {
 	Uint32 last = SDL_GetTicks();
 	while (m_running) {
 		handleEvents();
+		if (m_mouseLook && !mouseCaptureAllowed()) setMouseCapture(false);
 		if (!m_running) break;
 		int dw, dh;
 		SDL_GL_GetDrawableSize(m_app.window, &dw, &dh);
@@ -551,6 +578,7 @@ SessionResult LevelSession::run() {
 		m_app.overlay->draw();
 		m_ctx->present();
 	}
+	setMouseCapture(false);
 	m_app.overlay->setAudio(0);
 	return m_result;
 }

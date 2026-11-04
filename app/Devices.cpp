@@ -1,5 +1,6 @@
 #include "Devices.h"
 #include "Config.h"
+#include "Paths.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -32,10 +33,8 @@ void Devices::loadMappings() {
 #ifdef REDBOUND_CONTROLLERDB
 	if (count <= 0) count = SDL_GameControllerAddMappingsFromFile(REDBOUND_CONTROLLERDB);
 #endif
-	if (const char* home = getenv("HOME")) {
-		const int user = SDL_GameControllerAddMappingsFromFile((std::string(home) + "/.config/redbound/gamecontrollerdb.txt").c_str());
-		if (user > 0) count = (count > 0 ? count : 0) + user;
-	}
+	const int user = SDL_GameControllerAddMappingsFromFile((userConfigDir() + "/gamecontrollerdb.txt").c_str());
+	if (user > 0) count = (count > 0 ? count : 0) + user;
 #endif
 	printf("controllers: %d mappings from SDL_GameControllerDB\n", count);
 }

@@ -81,6 +81,10 @@ static bool useImportedData(LaunchOptions& options) {
 
 static bool createWindow(AppContext& app, const LaunchOptions& options, SDL_GLContext& gl) {
 	SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+#ifdef _WIN32
+	SDL_SetHint(SDL_HINT_OPENGL_ES_DRIVER, "1");
+	SDL_SetHint(SDL_HINT_VIDEO_WIN_D3DCOMPILER, "d3dcompiler_47.dll");
+#endif
 	SDL_SetHint(SDL_HINT_ACCELEROMETER_AS_JOYSTICK, "0");
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0 && SDL_Init(SDL_INIT_VIDEO) != 0) {
 		fprintf(stderr, "SDL_Init: %s\n", SDL_GetError());

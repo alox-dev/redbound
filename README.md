@@ -31,7 +31,7 @@ The AI involvement is stated openly here and in the in-game About screen.
 - Import screen: choose your `.deb` and the game data is extracted and verified (SHA-256) automatically.
 - Port menu, an overlay above the game (built with Dear ImGui) with game, controls, graphics, audio, improvements and
   about sections, in English and Spanish (more languages can be added without recompiling).
-- Every input device listed below, chosen automatically by what you use.
+- Every input device listed below, detected automatically (the accelerometer is turned on by hand).
 - Optional: level sections always visible (the N900 hid far parts of the level to save memory).
 - Fixes: the butterfly is animated during play, Bounce's eyes are hidden behind foliage, transparency sorting.
 
@@ -41,20 +41,19 @@ The AI involvement is stated openly here and in the in-game About screen.
 | --- | --- |
 | Linux (x86_64) | Supported |
 | Android 11 or newer (arm64) | Supported |
-| Windows | In development |
-| Nintendo Switch (homebrew) | In development |
+| Windows (x86_64) | In development |
 
 ## Input support
 
 | Input | How it works |
 | --- | --- |
 | Keyboard only | Classic tank controls: W/S or arrows move, A/D turn, Space jumps |
-| Keyboard and mouse | Movement relative to the camera; drag with the right button to rotate the camera |
+| Keyboard and mouse | Moving the mouse captures the cursor and rotates the camera, no button needed; W/A/S/D move relative to the camera |
 | Numeric keypad and phone keypads | 8/2/4/6 move, 5 or 0 jump (also phones with physical keys) |
-| Xbox and XInput controllers | d-pad: classic controls; left stick: camera relative movement; right stick: camera |
+| Xbox and XInput controllers | d-pad: classic controls; left stick: camera relative movement; right stick: camera; both navigate the menus |
 | PlayStation, Switch Pro, Joy-Con, 8BitDo and generic controllers | Same as above, via SDL_GameControllerDB; unknown controllers work as generic joysticks |
-| Touch gestures | Virtual sticks: left half to move, right half to look around (sides can be swapped); double tap to jump |
-| Accelerometer | Tilt to move (like the N900), shake to jump, tap to pause |
+| Touch | One finger swipes to move and holds a side to turn the camera; a second finger moves the camera; double tap jumps |
+| Accelerometer (experimental) | Turned on in the port menu: tilt to move (like the N900), shake to jump |
 | Vibration | Phone vibration and controller rumble where the original N900 vibrated |
 
 ## Getting started
@@ -68,8 +67,8 @@ The AI involvement is stated openly here and in the in-game About screen.
 
    Other versions are imported too, with a warning that they may not work correctly.
 2. Download Redbound for your platform from the [releases page](https://github.com/alox-dev/redbound/releases):
-   the `.AppImage` for Linux (make it executable with `chmod +x` and open it) or the `.apk` for Android. You can
-   also build it yourself as described below.
+   the `.AppImage` for Linux (make it executable with `chmod +x` and open it), the `.zip` for Windows (extract it
+   and run `redbound.exe`) or the `.apk` for Android. You can also build it yourself as described below.
 3. Start Redbound. The import screen opens: choose your `.deb`. On Android you can also copy it to
    `Android/data/io.github.alox_dev.redbound/files` over USB.
 4. Play. The demo starts; tap, click or press Start to open the main menu and pick a level.
@@ -83,7 +82,7 @@ The AI involvement is stated openly here and in the in-game About screen.
 
 | Action | Keyboard | Controller | Touch |
 | --- | --- | --- | --- |
-| Pause (original menu) | P or click the top left corner | Start / + | Tap the top left corner (gestures) or anywhere (accelerometer) |
+| Pause (original menu) | P or click the top left corner | Start / + | Tap the top left corner |
 | Port menu | Esc | Back / View / - | Three finger tap, or the Android Back button |
 
 The port menu pauses the game. Its sections:
@@ -91,11 +90,11 @@ The port menu pauses the game. Its sections:
 | Section | Contents |
 | --- | --- |
 | Game | Game data folder, import another `.deb`, language |
-| Controls | Movement scheme, camera sensitivity, invert Y, stick dead zone, touch scheme, tilt options, vibration, connected controllers, mapping |
+| Controls | Camera sensitivity, invert Y, stick dead zone, vibration, connected controllers, experimental accelerometer |
 | Graphics | Vertical sync, fullscreen, current resolution |
 | Audio | Mute and volume |
 | Improvements | Port changes that can be turned off |
-| About | Version, credits, libraries, license |
+| About | Version, credits, community links, libraries, license |
 
 Settings are saved in `~/.config/redbound/config.ini` (inside the app's storage on Android). See
 `docs/port-menu.md` and `docs/controls.md` for details.
@@ -112,6 +111,13 @@ cmake -S . -B build -G Ninja
 cmake --build build
 ctest --test-dir build
 ./build/app/redbound
+```
+
+**Windows** (cross compiled from Linux with MinGW-w64; runs on Direct3D 11 through ANGLE):
+
+```bash
+sudo apt install mingw-w64 libz-mingw-w64-dev zip imagemagick
+./scripts/package-windows.sh
 ```
 
 **Android** (JDK 17 or 21, Android SDK with NDK 26.1 and CMake 3.22.1):
@@ -132,7 +138,6 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 | AYN Thor Pro (Snapdragon 8 Gen 2, 12 GB RAM) | Android |
 | Duoqin F22 Pro (physical keypad) | Android |
 | Samsung Galaxy Note 10+ | Android |
-| Nintendo Switch (unpatched Erista) | Switch homebrew |
 
 ## Repository structure
 
@@ -143,6 +148,7 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 | `port/` | Platform layer: scene world and ball controller, OpenGL ES 2 renderer, audio, 2D UI, port menu, `.deb` importer |
 | `engine/` | Build of the KA3D engine (cloned into `third_party/ka3d` by `scripts/setup-ka3d.sh`) |
 | `platforms/` | Platform projects and packaging: `android/` (Gradle app), `linux/` (desktop entry) |
+| `cmake/` | Toolchain files (MinGW-w64 for Windows) |
 | `assets/` | Files shipped with the game: port menu languages (`lang/`) |
 | `scripts/` | Setup scripts for KA3D and SDL2 |
 | `tools/` | Development tools: `hgr-dump` (scene inspector), `pvr2png` (texture converter), binary analysis scripts |
@@ -160,6 +166,12 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
 | [`docs/gameplay.md`](docs/gameplay.md) | Ball physics, camera, level 1 and the level 2 rail mode |
 | [`docs/level-format.md`](docs/level-format.md) | The `.hgr` levels, user properties, triggers and their 88 actions |
 | [`docs/rendering.md`](docs/rendering.md) | OpenGL ES 2 renderer, effects, lightmaps, water, sky, KA3D patch |
+
+## Community
+
+- Discord: https://discord.gg/WXe65ENvwq
+- YouTube: https://www.youtube.com/@aloxdev
+- GitHub: https://github.com/alox-dev/redbound
 
 ## Contributing
 
@@ -185,5 +197,6 @@ If you enjoy Redbound and want to support its development, you can do so on
 
 Redbound is licensed under the [GNU General Public License v2](LICENSE), the license of the KA3D engine it is built
 on. Bundled libraries keep their own licenses: Dear ImGui (MIT), dr_libs (public domain / MIT-0), stb (public domain
-/ MIT), PVRTC decompressor (MIT), SDL_GameControllerDB (zlib); SDL2 (zlib) is downloaded by `scripts/setup-sdl2.sh`.
+/ MIT), PVRTC decompressor (MIT), SDL_GameControllerDB (zlib); SDL2 (zlib) and, on Windows, ANGLE (BSD) are
+downloaded by the setup scripts.
 Bounce Evolution and its data remain property of their owners.

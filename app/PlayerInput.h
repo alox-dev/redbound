@@ -19,6 +19,7 @@ struct PlayerCommand {
 class PlayerInput {
 public:
 	static std::string touchScheme();
+	void setMouseCaptured(bool captured) { m_mouseCaptured = captured; }
 	void handleTouch(const SDL_Event& e, int width, int height);
 	void addMouseOrbit(float dx, float dy) { m_orbitX += dx; m_orbitY += dy; }
 	PlayerCommand update(float dt, int width, int height, bool controllable);
@@ -27,12 +28,14 @@ private:
 	struct Finger {
 		bool active = false;
 		SDL_FingerID id = 0;
-		float startX = 0, startY = 0, x = 0, y = 0, lastX = 0, lastY = 0;
-		Uint32 startTime = 0;
+		bool swiping = false;
+		float startX = 0, startY = 0, x = 0, y = 0, restX = 0, restY = 0;
+		Uint32 startTime = 0, restTime = 0;
 	};
 	Finger m_move;
 	Finger m_look;
-	float m_lookRateX = 0.f, m_lookRateY = 0.f;
+	float m_lookRateX = 0.f, m_lookRateY = 0.f, m_holdYawSpeed = 0.f;
+	bool m_mouseCaptured = false;
 	Uint32 m_lastTap = 0;
 	int m_jumpFrames = 0;
 	float m_flickTime = 0.f, m_flickX = 0.f, m_flickY = 0.f;

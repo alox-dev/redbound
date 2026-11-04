@@ -9,7 +9,7 @@ namespace redbound {
 
 static float clampUnit(float v) { return std::max(-1.f, std::min(1.f, v)); }
 
-std::string PlayerInput::touchScheme() { return Config::get().str("controls.touch", "gestures"); }
+std::string PlayerInput::touchScheme() { return Config::get().flag("controls.accelerometer", false) ? "accelerometer" : "gestures"; }
 
 void PlayerInput::registerTap(const Finger& f, float x, float y, int width, int height) {
 	const float moved = std::hypot((x - f.startX) * width, (y - f.startY) * height);
@@ -27,22 +27,24 @@ void PlayerInput::handleTouch(const SDL_Event& e, int width, int height) {
 	if (touchScheme() != "gestures") return;
 	if (e.type == SDL_FINGERDOWN) {
 		if (e.tfinger.x < 0.12f && e.tfinger.y < 0.15f) return;
-		const bool swapped = Config::get().flag("controls.touch_swap_sides", false);
-		const bool moveSide = (e.tfinger.x < 0.5f) != swapped;
-		Finger& f = moveSide ? m_move : m_look;
-		if (f.active) return;
-		f.active = true;
-		f.id = e.tfinger.fingerId;
-		f.startX = f.x = f.lastX = e.tfinger.x;
-		f.startY = f.y = f.lastY = e.tfinger.y;
-		f.startTime = SDL_GetTicks();
+		Finger* f = !m_move.active ? &m_move : !m_look.active ? &m_look : nullptr;
+		if (!f) return;
+		f->active = true;
+		f->swiping = false;
+		f->id = e.tfinger.fingerId;
+		f->startX = f->x = f->restX = e.tfinger.x;
+		f->startY = f->y = f->restY = e.tfinger.y;
+		f->startTime = f->restTime = SDL_GetTicks();
 	} else if (e.type == SDL_FINGERMOTION) {
-		if (m_move.active && e.tfinger.fingerId == m_move.id) {
-			m_move.x = e.tfinger.x;
-			m_move.y = e.tfinger.y;
-		} else if (m_look.active && e.tfinger.fingerId == m_look.id) {
-			m_look.x = e.tfinger.x;
-			m_look.y = e.tfinger.y;
+		Finger* f = m_move.active && e.tfinger.fingerId == m_move.id ? &m_move : m_look.active && e.tfinger.fingerId == m_look.id ? &m_look : nullptr;
+		if (!f) return;
+		f->x = e.tfinger.x;
+		f->y = e.tfinger.y;
+		if (std::hypot((f->x - f->startX) * width, (f->y - f->startY) * height) > height * 0.06f) f->swiping = true;
+		if (std::hypot((f->x - f->restX) * width, (f->y - f->restY) * height) > height * 0.025f) {
+			f->restX = f->x;
+			f->restY = f->y;
+			f->restTime = SDL_GetTicks();
 		}
 	} else if (e.type == SDL_FINGERUP) {
 		if (m_move.active && e.tfinger.fingerId == m_move.id) {
@@ -54,6 +56,13 @@ void PlayerInput::handleTouch(const SDL_Event& e, int width, int height) {
 				m_flickTime = 0.35f;
 				m_flickX = dx / moved;
 				m_flickY = -dy / moved;
+			}
+			if (m_look.active) {
+				m_move = m_look;
+				m_move.startX = m_move.x;
+				m_move.startY = m_move.y;
+				m_move.swiping = false;
+				m_look.active = false;
 			}
 		} else if (m_look.active && e.tfinger.fingerId == m_look.id) {
 			m_look.active = false;
@@ -111,6 +120,7 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 	if (k[SDL_SCANCODE_S] || k[SDL_SCANCODE_DOWN] || k[SDL_SCANCODE_KP_2] || k[SDL_SCANCODE_2]) forward -= 1.f;
 	if (k[SDL_SCANCODE_D] || k[SDL_SCANCODE_RIGHT] || k[SDL_SCANCODE_KP_6] || k[SDL_SCANCODE_6]) turn += 1.f;
 	if (k[SDL_SCANCODE_A] || k[SDL_SCANCODE_LEFT] || k[SDL_SCANCODE_KP_4] || k[SDL_SCANCODE_4]) turn -= 1.f;
+	const bool keyboard = forward != 0.f || turn != 0.f;
 	bool jump = k[SDL_SCANCODE_SPACE] || k[SDL_SCANCODE_KP_5] || k[SDL_SCANCODE_KP_0] || k[SDL_SCANCODE_5] || k[SDL_SCANCODE_0];
 	const float deadzone = cfg.num("controls.deadzone", 0.22f);
 	float lx = 0.f, ly = 0.f, rx = 0.f, ry = 0.f;
@@ -154,16 +164,22 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 		for (int b = 0; b < std::min(2, SDL_JoystickNumButtons(js)); ++b)
 			if (SDL_JoystickGetButton(js, b)) jump = true;
 	}
-	float touchX = 0.f, touchY = 0.f;
+	float touchX = 0.f, touchY = 0.f, holdTarget = 0.f;
 	bool touchActive = m_look.active;
 	if (m_move.active) {
-		const float radius = height * 0.08f;
-		touchX = clampUnit((m_move.x - m_move.startX) * width / radius);
-		touchY = clampUnit(-(m_move.y - m_move.startY) * height / radius);
-		if (std::fabs(touchX) < 0.12f) touchX = 0.f;
-		if (std::fabs(touchY) < 0.12f) touchY = 0.f;
 		touchActive = true;
+		if (m_move.swiping) {
+			const float radius = height * 0.08f;
+			touchX = clampUnit((m_move.x - m_move.startX) * width / radius);
+			touchY = clampUnit(-(m_move.y - m_move.startY) * height / radius);
+			if (std::fabs(touchX) < 0.12f) touchX = 0.f;
+			if (std::fabs(touchY) < 0.12f) touchY = 0.f;
+		} else if (SDL_GetTicks() - m_move.restTime > 200) {
+			holdTarget = m_move.restX > 0.5f ? 1.f : -1.f;
+		}
 	}
+	m_holdYawSpeed += (holdTarget * 1.8f - m_holdYawSpeed) * std::min(1.f, dt * 10.f);
+	if (holdTarget == 0.f && std::fabs(m_holdYawSpeed) < 0.01f) m_holdYawSpeed = 0.f;
 	float lookStickX = 0.f, lookStickY = 0.f;
 	if (m_look.active) {
 		const float radius = height * 0.10f;
@@ -181,7 +197,7 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 	if (lookStickX == 0.f && std::fabs(m_lookRateX) < 0.01f) m_lookRateX = 0.f;
 	if (lookStickY == 0.f && std::fabs(m_lookRateY) < 0.01f) m_lookRateY = 0.f;
 	const float lookSensitivity = cfg.num("controls.camera_sensitivity", 1.f);
-	const float lookYaw = m_lookRateX * 1.5f * lookSensitivity * dt;
+	const float lookYaw = (m_lookRateX * 1.5f + m_holdYawSpeed) * lookSensitivity * dt;
 	const float lookPitch = m_lookRateY * 1.0f * lookSensitivity * dt * (cfg.flag("controls.invert_y", false) ? -1.f : 1.f);
 	if (m_flickTime > 0.f) {
 		m_flickTime -= dt;
@@ -204,12 +220,9 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 	turn = clampUnit(turn);
 	const bool sticks = lx != 0.f || ly != 0.f || rx != 0.f || ry != 0.f;
 	const bool mouseOrbit = m_orbitX != 0.f || m_orbitY != 0.f;
-	const std::string scheme = cfg.str("controls.scheme", "auto");
-	if (scheme == "classic") m_modern = false;
-	else if (scheme == "modern") m_modern = true;
-	else if (touchActive) m_modern = true;
-	else if (dpad) m_modern = false;
-	else if (sticks || mouseOrbit) m_modern = true;
+	if (touchActive || mouseOrbit || (m_mouseCaptured && keyboard)) m_modern = true;
+	else if (dpad || keyboard) m_modern = false;
+	else if (sticks) m_modern = true;
 	const float sensitivity = cfg.num("controls.camera_sensitivity", 1.f);
 	const float invertY = cfg.flag("controls.invert_y", false) ? -1.f : 1.f;
 	cmd.cameraYaw = (rx * 2.6f * dt + m_orbitX * 0.005f) * sensitivity + lookYaw;

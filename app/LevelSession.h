@@ -70,6 +70,8 @@ private:
 	float m_completeTimer = 0.f;
 	bool m_boostWas = false;
 	bool m_mouseLook = false;
+	int m_mouseTravel = 0;
+	int m_stickNav = 0;
 	bool m_freeFly = false;
 	bool m_followGameCamera = true;
 	bool m_helpersVisible = false;
@@ -88,6 +90,8 @@ private:
 	void setupCamera();
 	void handleEvents();
 	bool handlePauseEvent(const SDL_Event& e);
+	bool mouseCaptureAllowed() const;
+	void setMouseCapture(bool capture);
 	void handleMenuAction(MenuAction action);
 	void handleDevKey(SDL_Keycode key);
 	void update(float dt, float realDt);

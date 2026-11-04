@@ -22,4 +22,7 @@ platforms/android/keystore.properties
 dist/
 platforms/windows/icon-local/
 platforms/switch/icon-local/
-assets/icons/
+third_party/windows/
+MOK.*
+*.priv
+*.der

@@ -1,6 +1,7 @@
 #include "Hud.h"
 #include "BallController.h"
 #include "FileUtils.h"
+#include "Paths.h"
 #include "SceneWorld.h"
 #include "Ui.h"
 #include <algorithm>
@@ -11,9 +12,7 @@
 namespace redbound {
 
 int recordArcadeScore(int meters, std::vector<int>& scores) {
-	const char* xdg = getenv("XDG_DATA_HOME");
-	const char* home = getenv("HOME");
-	const std::string dir = (xdg ? std::string(xdg) : std::string(home ? home : ".") + "/.local/share") + "/redbound";
+	const std::string dir = userDataDir();
 	const std::string path = dir + "/level2.scores";
 	scores.clear();
 	if (FILE* f = fopen(path.c_str(), "r")) {

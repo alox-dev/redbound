@@ -1,4 +1,5 @@
 #include "DebImport.h"
+#include "Paths.h"
 #include "Sha256.h"
 #include <zlib.h>
 #include <cstdio>
@@ -23,12 +24,7 @@ static bool readAll(const std::string& p, std::vector<unsigned char>& out) {
 }
 
 static bool mkdirs(const std::string& path) {
-	std::string cur;
-	for (size_t i = 0; i < path.size(); ++i) {
-		cur += path[i];
-		if (path[i] == '/' && cur.size() > 1) mkdir(cur.c_str(), 0755);
-	}
-	mkdir(path.c_str(), 0755);
+	makeDirectories(path);
 	struct stat st;
 	return stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
 }
@@ -156,10 +152,6 @@ bool gameDataPresent(const std::string& destDir) {
 	return true;
 }
 
-std::string defaultGameDir() {
-	const char* x = getenv("XDG_DATA_HOME");
-	const char* home = getenv("HOME");
-	return (x && *x ? std::string(x) : std::string(home ? home : ".") + "/.local/share") + "/redbound";
-}
+std::string defaultGameDir() { return userDataDir(); }
 
 }

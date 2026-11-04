@@ -1,6 +1,6 @@
 diff --git a/include/config/linux/config.h b/include/config/linux/config.h
 new file mode 100644
-index 0000000..ecad93d
+index 0000000..fd0e717
 --- /dev/null
 +++ b/include/config/linux/config.h
 @@ -0,0 +1,7 @@
@@ -13,7 +13,7 @@ index 0000000..ecad93d
 +#include <lang/assert.h>
 diff --git a/include/config/linux/xmath.h b/include/config/linux/xmath.h
 new file mode 100644
-index 0000000..2c23c0e
+index 0000000..dbc5406
 --- /dev/null
 +++ b/include/config/linux/xmath.h
 @@ -0,0 +1,4 @@
@@ -96,14 +96,22 @@ index 2e6cdac..bd0ede7 100644
  #define MAX_PROFILER_SAMPLES 30
  #define	MAX_PROFILER_LINELENGTH 200
 diff --git a/include/lang/pp.h b/include/lang/pp.h
-index 9876a5a..d51fe34 100644
+index 9876a5a..cf288f0 100644
 --- a/include/lang/pp.h
 +++ b/include/lang/pp.h
-@@ -75,6 +75,11 @@
+@@ -68,13 +68,18 @@
+ #endif
+ 
+ // PLATFORM_WIN32
+-#if !defined(PLATFORM_WIN32) && (defined(WIN32) || defined(_WIN32)) && !defined(_WIN32_WCE) && !defined(EMULATOR_BUILD)
++#if !defined(PLATFORM_WIN32) && (defined(WIN32) || defined(_WIN32)) && !defined(_WIN32_WCE) && !defined(EMULATOR_BUILD) && !defined(__MINGW32__)
+ //#pragma message("Defining PLATFORM_WIN32")
+ #define PLATFORM_WIN32
+ #include <lang/pp_once.h>
  #endif
  
  
-+#if !defined(PLATFORM_LINUX) && (defined(__linux__) || defined(__ANDROID__) || defined(__SWITCH__) || defined(__unix__))
++#if !defined(PLATFORM_LINUX) && (defined(__linux__) || defined(__ANDROID__) || defined(__SWITCH__) || defined(__unix__) || defined(__MINGW32__))
 +#define PLATFORM_LINUX
 +#include <lang/pp_once.h>
 +#endif
@@ -112,7 +120,7 @@ index 9876a5a..d51fe34 100644
   * Cleanup
   *************************************************************/
 diff --git a/source/gr/Context.cpp b/source/gr/Context.cpp
-index ccdd453..e622fb8 100644
+index ccdd453..9e01e39 100644
 --- a/source/gr/Context.cpp
 +++ b/source/gr/Context.cpp
 @@ -59,13 +59,15 @@ float Context::aspect() const
@@ -134,7 +142,7 @@ index ccdd453..e622fb8 100644
  }
  
 diff --git a/source/hgr/Camera.cpp b/source/hgr/Camera.cpp
-index 9643301..e02a739 100644
+index 9643301..7a45d97 100644
 --- a/source/hgr/Camera.cpp
 +++ b/source/hgr/Camera.cpp
 @@ -22,7 +22,7 @@ USING_NAMESPACE(framework)
@@ -146,8 +154,7 @@ index 9643301..e02a739 100644
  #define ENABLE_FRUSTUM_CULLING
  #define ENABLE_SPHERE_FRUSTUM_TEST
  //#define ENABLE_OBBOX_FRUSTUM_TEST
-@@ -274,7 +276,13 @@ void Camera::cullVisuals( const Array<Node*>& nodes, Array<Visual*>& visuals )
- 			if ( !visible )
+@@ -275,6 +275,12 @@ void Camera::cullVisuals( const Array<Node*>& nodes, Array<Visual*>& visuals )
  			{
  #ifdef ENABLE_SPHERE_FRUSTUM_TEST
  				float r = vis->boundRadius();
@@ -160,7 +167,7 @@ index 9643301..e02a739 100644
  				//float r = Math::max( vis->boundBoxMax().length(), vis->boundBoxMin().length() );
  				visible = ViewFrustum::testSphere( worldtm, r, frustumworld, vis->frustumCheckHint );
  #endif
-@@ -294,7 +304,8 @@ void Camera::cullVisuals( const Array<Node*>& nodes, Array<Visual*>& visuals )
+@@ -294,7 +300,8 @@ void Camera::cullVisuals( const Array<Node*>& nodes, Array<Visual*>& visuals )
  			{
  #ifdef ENABLE_SORTING
  				VisualSorter objdata;
@@ -171,7 +178,7 @@ index 9643301..e02a739 100644
  				m_visualSorter.add( objdata );
  #else
 diff --git a/source/hgr/ParticleSystem.cpp b/source/hgr/ParticleSystem.cpp
-index cdf0277..9f85d98 100644
+index cdf0277..3ab90da 100644
 --- a/source/hgr/ParticleSystem.cpp
 +++ b/source/hgr/ParticleSystem.cpp
 @@ -438,7 +438,7 @@ void ParticleSystem::Description::check( const String& filename ) const
@@ -183,7 +190,7 @@ index cdf0277..9f85d98 100644
  		throwError( IOException( Format("Invalid value in \"{0}\": TextureFrames={1} (not square of integer)", filename, textureFrames) ) );
  	if ( textureAnimation == ANIM_COUNT )
  		throwError( IOException( Format("Invalid value  in \"{0}\": textureAnimation invalid", filename) ) );
-@@ -736,10 +738,22 @@ void ParticleSystem::render( Context* context, Camera* camera, int priority )
+@@ -736,10 +736,22 @@ void ParticleSystem::render( Context* context, Camera* camera, int priority )
  			renderN3D( context, camera );
  			break;
  
@@ -207,7 +214,7 @@ index cdf0277..9f85d98 100644
  	}
  }
  
-@@ -1235,6 +1250,249 @@ void ParticleSystem::renderDX( Context* context, Camera* camera )
+@@ -1235,6 +1247,249 @@ void ParticleSystem::renderDX( Context* context, Camera* camera )
  }
  #endif
  
@@ -457,7 +464,7 @@ index cdf0277..9f85d98 100644
  void ParticleSystem::getShaders( Array<Shader*>& shaders )
  {
  	shaders.add( m_desc->shader );
-@@ -1298,7 +1580,7 @@ void ParticleSystem::refreshCachedValues()
+@@ -1298,7 +1553,7 @@ void ParticleSystem::refreshCachedValues()
  
  	// setup texture uv cache
  	const int frames = m_desc->textureFrames;
@@ -466,7 +473,7 @@ index cdf0277..9f85d98 100644
  	m_desc->textureFrameUV = 1.f/float(framesx);
  	m_desc->uvcache.resize( frames*2 );
  
-@@ -1317,6 +1599,15 @@ void ParticleSystem::refreshCachedValues()
+@@ -1317,6 +1572,15 @@ void ParticleSystem::refreshCachedValues()
  	}
  }
  
@@ -532,7 +539,7 @@ index 21b9853..3d78ee0 100644
  
  USING_NAMESPACE(lang)
 diff --git a/source/lang/String.cpp b/source/lang/String.cpp
-index abcf855..a1926b2 100644
+index abcf855..1abd233 100644
 --- a/source/lang/String.cpp
 +++ b/source/lang/String.cpp
 @@ -272,7 +272,7 @@ bool String::startsWith( const String& prefix ) const
@@ -544,7 +551,7 @@ index abcf855..a1926b2 100644
  	int thislen = length();
  
  	if ( thislen > 0 )
-@@ -280,11 +281,11 @@ int String::hashCode() const
+@@ -280,11 +280,11 @@ int String::hashCode() const
  		char* s = lang_Globals::get().stringPool.get(m_h);
  		for ( int i = 0 ; i < thislen ; ++i )
  		{

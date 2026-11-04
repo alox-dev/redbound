@@ -9,7 +9,7 @@ TOOL_SHA256=46fdd785094c7f6e545b61afcfb0f3d98d8eab243f644b4b17698c01d06083d1
 TOOL="dist/tools/appimagetool-$TOOL_VERSION"
 
 command -v desktop-file-validate >/dev/null 2>&1 || { echo "desktop-file-validate is required (sudo apt install desktop-file-utils)"; exit 1; }
-[ -d third_party/ka3d/source ] || ./scripts/setup-ka3d.sh
+./scripts/setup-ka3d.sh
 GENERATOR=""; command -v ninja >/dev/null 2>&1 && GENERATOR="-G Ninja"
 cmake -S . -B build-release $GENERATOR -DCMAKE_BUILD_TYPE=Release -DREDBOUND_TOOLS=OFF
 cmake --build build-release
@@ -25,6 +25,7 @@ rm -rf "$APPDIR" && mkdir -p "$APPDIR/usr/bin/assets" "$APPDIR/usr/lib"
 cp build-release/app/redbound "$APPDIR/usr/bin/"
 strip "$APPDIR/usr/bin/redbound"
 cp -r assets/lang "$APPDIR/usr/bin/assets/"
+[ -d assets/title ] && cp -r assets/title "$APPDIR/usr/bin/assets/"
 cp third_party/gamecontrollerdb/gamecontrollerdb.txt "$APPDIR/usr/bin/"
 SDL_LIB=$(ldd build-release/app/redbound | awk '/libSDL2-2.0.so/ { print $3 }')
 [ -n "$SDL_LIB" ] && cp -L "$SDL_LIB" "$APPDIR/usr/lib/"

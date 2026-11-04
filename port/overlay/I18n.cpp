@@ -1,4 +1,5 @@
 #include "I18n.h"
+#include "Paths.h"
 #include <SDL.h>
 #include <cstdlib>
 
@@ -22,7 +23,7 @@ static std::string readAll(const std::string& path) {
 
 static std::vector<std::string> searchDirs() {
 	std::vector<std::string> dirs;
-	if (const char* home = getenv("HOME")) dirs.push_back(std::string(home) + "/.config/redbound/lang/");
+	dirs.push_back(userConfigDir() + "/lang/");
 #ifdef __ANDROID__
 	dirs.push_back("lang/");
 #else
