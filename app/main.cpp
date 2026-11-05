@@ -1,4 +1,5 @@
 #include "AppContext.h"
+#include "Log.h"
 #include "Config.h"
 #include "DebImport.h"
 #include "Devices.h"
@@ -22,28 +23,6 @@
 using namespace redbound;
 
 #ifdef __ANDROID__
-static void redirectOutputToLogcat() {
-	static int pipeFds[2];
-	if (pipe(pipeFds) != 0) return;
-	setvbuf(stderr, 0, _IOLBF, 0);
-	dup2(pipeFds[1], 1);
-	dup2(pipeFds[1], 2);
-	std::thread([] {
-		char buffer[1024];
-		std::string line;
-		ssize_t n;
-		while ((n = read(pipeFds[0], buffer, sizeof(buffer))) > 0) {
-			for (ssize_t i = 0; i < n; ++i) {
-				if (buffer[i] == '\n') {
-					__android_log_write(ANDROID_LOG_INFO, "Redbound", line.c_str());
-					line.clear();
-				} else {
-					line += buffer[i];
-				}
-			}
-		}
-	}).detach();
-}
 
 static void useAppStorage() {
 	if (const char* internal = SDL_AndroidGetInternalStoragePath()) {
@@ -145,9 +124,9 @@ static bool runImportScreen(AppContext& app) {
 int main(int argc, char** argv) {
 	setvbuf(stdout, 0, _IOLBF, 0);
 #ifdef __ANDROID__
-	redirectOutputToLogcat();
 	useAppStorage();
 #endif
+	startLog();
 	Config::get().load();
 	Config::get().applyToEnvironment();
 	LaunchOptions options;

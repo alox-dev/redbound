@@ -68,6 +68,20 @@ from actions (`playsound`, `stopsound`) and from the ball (jump, impacts) go thr
 level menu (`app/LevelMenu`), HUD and results (`app/Hud`) use the original sprite names (`MENU_LEVEL_1`,
 `LEVEL_2_HUD_TIME`...). Level 2 records are stored in `level2.scores` next to the game data.
 
+## Log, background and timing
+
+Everything the game prints is also written to `redbound.log` (`app/Log.cpp`), in English, starting with the version,
+platform, SDL version and date; the previous run is kept as `redbound.previous.log`. On Linux the output still goes
+to the terminal, on Android to logcat, and on Windows (a GUI application without a console) only to the file.
+
+When the app goes to the background (Android) or the window loses focus or is minimized (desktop), the game opens
+the original pause menu and pauses the audio; the audio resumes when the app comes back, while the game stays paused
+until the player continues. Frame time is capped at 0.1 s, so a long suspension does not reach the physics or the
+level 2 timer as one huge step.
+
+The mixer (`port/audio/Audio.cpp`) applies a master gain plus separate music and sound effect gains (each with its
+own mute), and can be paused as a whole.
+
 ## Command line
 
 ```

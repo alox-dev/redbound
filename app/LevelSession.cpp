@@ -93,8 +93,7 @@ void LevelSession::loadScene() {
 	m_audio.reset(new Audio);
 	Config& cfg = Config::get();
 	if (!getenv("REDBOUND_NO_AUDIO") && !m_options.dataDir.empty()) m_audio->init(m_options.dataDir);
-	m_audio->setMuted(cfg.flag("audio.mute", false));
-	m_audio->setMasterVolume(cfg.num("audio.volume", 1.f));
+	applyAudioSettings(*m_audio);
 	m_app.overlay->setAudio(m_audio.get());
 	m_ambient.load(m_scene, *m_audio);
 	if (m_options.menu || (m_options.fromMenu && m_options.play && m_options.levelFile.find("level01") != std::string::npos)) m_hud.startLogo();
@@ -241,6 +240,15 @@ void LevelSession::setupCamera() {
 	}
 }
 
+void LevelSession::pauseForBackground() {
+	if (!m_audio->paused()) printf("app: in the background, game paused and audio muted\n");
+	m_audio->setPaused(true);
+	if (m_hasUi && (m_options.menu || m_options.fromMenu) && m_player && !m_results && !m_menu.isOpen()) {
+		m_menu.open();
+		if (!m_ui->hasCapture()) m_needCapture = true;
+	}
+}
+
 bool LevelSession::handlePauseEvent(const SDL_Event& e) {
 	if (!m_hasUi || !(m_options.menu || m_options.fromMenu) || m_menu.isOpen()) return false;
 	const bool clickPause = e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT &&
@@ -292,6 +300,17 @@ void LevelSession::handleEvents() {
 	SDL_Event e;
 	while (SDL_PollEvent(&e)) {
 		if (Devices::instance().handleEvent(e)) continue;
+		if (e.type == SDL_APP_WILLENTERBACKGROUND || e.type == SDL_APP_DIDENTERBACKGROUND ||
+		    (e.type == SDL_WINDOWEVENT && (e.window.event == SDL_WINDOWEVENT_FOCUS_LOST || e.window.event == SDL_WINDOWEVENT_MINIMIZED))) {
+			setMouseCapture(false);
+			pauseForBackground();
+		} else if (e.type == SDL_APP_DIDENTERFOREGROUND ||
+		           (e.type == SDL_WINDOWEVENT && (e.window.event == SDL_WINDOWEVENT_FOCUS_GAINED || e.window.event == SDL_WINDOWEVENT_RESTORED))) {
+			if (m_audio->paused()) {
+				m_audio->setPaused(false);
+				printf("app: back in the foreground, audio resumed\n");
+			}
+		}
 		if (m_app.overlay->processEvent(e)) continue;
 		if (m_player && !m_menu.isOpen() && !m_results) m_input.handleTouch(e, m_app.width, m_app.height);
 		if (e.type == SDL_CONTROLLERAXISMOTION && e.caxis.axis == SDL_CONTROLLER_AXIS_LEFTX && m_menu.isOpen()) {
@@ -347,8 +366,6 @@ void LevelSession::handleEvents() {
 		} else if (e.type == SDL_KEYDOWN) {
 			if (e.key.keysym.sym == SDLK_m) m_audio->setMuted(!m_audio->muted());
 			else if (m_options.dev) handleDevKey(e.key.keysym.sym);
-		} else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
-			setMouseCapture(false);
 		} else if (e.type == SDL_MOUSEMOTION && e.motion.which != SDL_TOUCH_MOUSEID) {
 			if (m_mouseLook) {
 				if (m_player && !m_freeFly) m_input.addMouseOrbit((float)e.motion.xrel, (float)e.motion.yrel);
@@ -557,7 +574,7 @@ SessionResult LevelSession::run() {
 			m_ctx->resize(dw, dh);
 		}
 		const Uint32 now = SDL_GetTicks();
-		const float realDt = (now - last) / 1000.f;
+		const float realDt = std::min(0.1f, (now - last) / 1000.f);
 		last = now;
 		const bool paused = (m_menu.isOpen() && m_player && !m_results) || m_app.overlay->open();
 		const bool liveBlur = (m_menu.isOpen() || m_results) && !paused;

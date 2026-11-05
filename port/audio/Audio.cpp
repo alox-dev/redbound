@@ -179,10 +179,17 @@ void Audio::callback(void* user, Uint8* stream, int len) {
 }
 
 void Audio::mix(int16_t* out, int frames) {
+	if (m_paused) {
+		std::fill(out, out + (size_t)frames * 2, (int16_t)0);
+		return;
+	}
 	std::vector<float> acc((size_t)frames * 2, 0.f);
+	const float musicGain = m_musicMuted ? 0.f : m_musicVolume.load();
+	const float soundsGain = m_soundsMuted ? 0.f : m_soundsVolume.load();
 	{
 		std::lock_guard<std::mutex> lk(m_mutex);
 		for (Voice& v : m_voices) {
+			const float gain = v.volume * (v.music ? musicGain : soundsGain);
 			const std::vector<int16_t>& s = v.clip->samples;
 			const size_t total = s.size() / 2;
 			for (int i = 0; i < frames; ++i) {
@@ -190,8 +197,8 @@ void Audio::mix(int16_t* out, int frames) {
 					if (!v.loop) break;
 					v.pos = 0;
 				}
-				acc[i * 2] += s[v.pos * 2] * v.volume;
-				acc[i * 2 + 1] += s[v.pos * 2 + 1] * v.volume;
+				acc[i * 2] += s[v.pos * 2] * gain;
+				acc[i * 2 + 1] += s[v.pos * 2 + 1] * gain;
 				++v.pos;
 			}
 		}
@@ -199,7 +206,7 @@ void Audio::mix(int16_t* out, int frames) {
 		                              [](const Voice& v) { return !v.loop && v.pos >= v.clip->samples.size() / 2; }),
 		               m_voices.end());
 	}
-	const float master = m_muted ? 0.f : m_master;
+	const float master = m_muted ? 0.f : m_master.load();
 	for (int i = 0; i < frames * 2; ++i) {
 		float x = acc[i] * master;
 		if (x > 32767.f || x < -32768.f) x = 32767.f * std::tanh(x / 32767.f);
