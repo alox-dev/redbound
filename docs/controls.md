@@ -43,8 +43,15 @@ One adaptive scheme covers one handed and two handed play:
   radius 8 % of the screen height, 12 % dead zone; a quick flick released within 220 ms keeps him sliding for
   0.35 s). Holding the finger still for 200 ms rotates the camera toward that side of the screen, easing in and out
   (up to 1.8 rad/s, scaled by the camera sensitivity).
-- **Second finger**, while the first is down: a virtual stick for the camera (radius 10 % of the screen height, 15 %
-  dead zone, quadratic response up to 1.5 rad/s sideways and 1.0 rad/s vertically).
+- **Second finger**, while the first is down: drags the view directly, like the camera of mobile open world games:
+  a swipe across the whole screen width turns the camera half a turn (scaled by the camera sensitivity), smoothed
+  over about 50 ms so the camera follows the finger without jitter and settles as soon as the finger stops.
+- **Automatic follow**: while the first finger moves Bounce and the view has not been touched for one second, the
+  camera turns gradually behind the direction of movement (up to 1.2 rad/s, easing in over about half a second); it
+  never swings around when Bounce moves toward the camera.
+- Touches are checked against the fingers SDL reports on the screen every frame, so a finger lifted while a menu was
+  open (when the menu, not the game, receives the release) never stays active. Turning the accelerometer on clears
+  every touch state.
 - **Double tap** with any finger (two short taps within 350 ms) jumps.
 
 ## Accelerometer (experimental)
