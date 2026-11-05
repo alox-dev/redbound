@@ -2,6 +2,7 @@
 #include "BallController.h"
 #include "FileUtils.h"
 #include "Paths.h"
+#include "Records.h"
 #include "SceneWorld.h"
 #include "Ui.h"
 #include <algorithm>
@@ -11,31 +12,6 @@
 
 namespace redbound {
 
-int recordArcadeScore(int meters, std::vector<int>& scores) {
-	const std::string dir = userDataDir();
-	const std::string path = dir + "/level2.scores";
-	scores.clear();
-	if (FILE* f = fopen(path.c_str(), "r")) {
-		int v;
-		while (scores.size() < 3 && fscanf(f, "%d", &v) == 1) scores.push_back(v);
-		fclose(f);
-	}
-	if (scores.empty()) scores = { 3500, 2000, 1000 };
-	int rank = -1;
-	for (int i = 0; i < (int)scores.size(); ++i)
-		if (meters > scores[i]) { rank = i; break; }
-	if (rank < 0 && scores.size() < 3) rank = (int)scores.size();
-	if (rank >= 0) {
-		scores.insert(scores.begin() + rank, meters);
-		if (scores.size() > 3) scores.resize(3);
-	}
-	makeDirectories(dir);
-	if (FILE* f = fopen(path.c_str(), "w")) {
-		for (int v : scores) fprintf(f, "%d\n", v);
-		fclose(f);
-	}
-	return rank;
-}
 
 static int meters(const BallController& player) { return (int)(player.railDistance() / 100.f); }
 

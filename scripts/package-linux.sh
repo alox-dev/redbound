@@ -26,6 +26,7 @@ cp build-release/app/redbound "$APPDIR/usr/bin/"
 strip "$APPDIR/usr/bin/redbound"
 cp -r assets/lang "$APPDIR/usr/bin/assets/"
 [ -d assets/title ] && cp -r assets/title "$APPDIR/usr/bin/assets/"
+cp -r assets/fonts "$APPDIR/usr/bin/assets/"
 cp third_party/gamecontrollerdb/gamecontrollerdb.txt "$APPDIR/usr/bin/"
 SDL_LIB=$(ldd build-release/app/redbound | awk '/libSDL2-2.0.so/ { print $3 }')
 [ -n "$SDL_LIB" ] && cp -L "$SDL_LIB" "$APPDIR/usr/lib/"

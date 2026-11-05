@@ -235,6 +235,11 @@ private:
 	struct Target { GLuint fbo, depth; int w, h; };
 	std::map<GLuint, Target> m_targets;
 	Texture* m_currentTarget;
+	unsigned m_defaultFramebuffer = 0;
+	int m_defaultFramebufferHeight = 0;
+public:
+	void setDefaultFramebuffer(unsigned fbo, int height = 0) { m_defaultFramebuffer = fbo; m_defaultFramebufferHeight = height; }
+private:
 	std::map<std::string, GLuint> m_neutral;
 	std::string m_shaderDir, m_textureDir;
 	std::map<std::string, P(GLES2_Effect)> m_effects;

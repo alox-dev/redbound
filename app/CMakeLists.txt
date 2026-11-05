@@ -3,6 +3,7 @@ set(APP_SOURCES
 	AmbientSounds.cpp
 	Devices.cpp
 	Log.cpp
+	SceneTarget.cpp
 	FadeOverlay.cpp
 	FileUtils.cpp
 	Hud.cpp
