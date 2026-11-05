@@ -14,7 +14,7 @@ help texts.
 | Game | Game data status and folder, import another `.deb`, language | `general.language` |
 | Controls | Camera sensitivity and vertical inversion; controller dead zone, vibration and connected controllers; on touch devices, the experimental accelerometer and its options | `controls.*` |
 | Graphics | Fullscreen, vertical sync, current resolution | `graphics.vsync`, `graphics.fullscreen` |
-| Audio | Mute, volume | `audio.mute`, `audio.volume` |
+| Audio | General, music and sound effects, each with mute and volume | `audio.*` |
 | Improvements | Show the whole level | `improvements.visible_sections` |
 | About | Title, version, credits, community links (Discord, GitHub, YouTube, Ko-fi), original game, libraries, license | |
 
@@ -41,8 +41,8 @@ font is taken from the system (fontconfig on Linux, Roboto or Noto on Android) s
 | --- | --- |
 | `general.language` | `auto` (system language) or a language code |
 | `graphics.vsync`, `graphics.fullscreen` | `1` / `0` |
-| `audio.mute` | `1` / `0` |
-| `audio.volume` | `0` to `1` |
+| `audio.mute`, `audio.music_mute`, `audio.sounds_mute` | `1` / `0` (everything, music, sound effects) |
+| `audio.volume`, `audio.music_volume`, `audio.sounds_volume` | `0` to `1` |
 | `controls.camera_sensitivity` | `0.3` to `3` |
 | `controls.invert_y` | `1` / `0` |
 | `controls.deadzone` | `0.05` to `0.5` |

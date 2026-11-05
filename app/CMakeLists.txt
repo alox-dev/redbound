@@ -2,6 +2,7 @@ set(APP_SOURCES
 	main.cpp
 	AmbientSounds.cpp
 	Devices.cpp
+	Log.cpp
 	FadeOverlay.cpp
 	FileUtils.cpp
 	Hud.cpp
@@ -33,3 +34,4 @@ if(ANDROID)
 else()
   target_compile_definitions(${REDBOUND_APP} PRIVATE REDBOUND_CONTROLLERDB="${PROJECT_SOURCE_DIR}/third_party/gamecontrollerdb/gamecontrollerdb.txt")
 endif()
+target_compile_definitions(${REDBOUND_APP} PRIVATE REDBOUND_VERSION="${REDBOUND_VERSION_STRING}")

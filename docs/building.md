@@ -159,6 +159,7 @@ JPEG for Switch (`platforms/switch/icon-local/`). Builds and packaging scripts u
 | Imported game data | `$XDG_DATA_HOME/redbound` (`~/.local/share/redbound`); Windows: `%APPDATA%\redbound` | app internal storage |
 | Settings (`config.ini`) | `$XDG_CONFIG_HOME/redbound` (`~/.config/redbound`); Windows: `%APPDATA%\redbound` | app internal storage |
 | Level 2 records | next to the game data (`level2.scores`) | app internal storage |
+| Log (`redbound.log`, previous run in `redbound.previous.log`) | next to the game data; Windows: `%APPDATA%\redbound` | `Android/data/io.github.alox_dev.redbound/files` (reachable over USB) |
 | Extra languages, controller mappings | `~/.config/redbound/lang/`, `~/.config/redbound/gamecontrollerdb.txt` | bundled |
 
 ## Supported game packages
