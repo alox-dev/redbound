@@ -8,6 +8,7 @@ class Config {
 public:
 	static Config& get();
 	void load();
+	void migrate();
 	void save() const;
 	std::string str(const std::string& k, const std::string& def = "") const;
 	bool flag(const std::string& k, bool def = false) const;

@@ -14,6 +14,7 @@ struct PlayerCommand {
 	float cameraYaw = 0.f;
 	float cameraPitch = 0.f;
 	bool followPath = false;
+	bool autoFollow = false;
 };
 
 class PlayerInput {
@@ -21,6 +22,7 @@ public:
 	static std::string touchScheme();
 	void setMouseCaptured(bool captured) { m_mouseCaptured = captured; }
 	void handleTouch(const SDL_Event& e, int width, int height);
+	void resetTouch();
 	void addMouseOrbit(float dx, float dy) { m_orbitX += dx; m_orbitY += dy; }
 	PlayerCommand update(float dt, int width, int height, bool controllable);
 	bool anyJumpButton() const;
@@ -34,7 +36,9 @@ private:
 	};
 	Finger m_move;
 	Finger m_look;
-	float m_lookRateX = 0.f, m_lookRateY = 0.f, m_holdYawSpeed = 0.f;
+	float m_holdYawSpeed = 0.f;
+	float m_lookPendingX = 0.f, m_lookPendingY = 0.f;
+	Uint32 m_lastLookTime = 0;
 	bool m_mouseCaptured = false;
 	Uint32 m_lastTap = 0;
 	int m_jumpFrames = 0;

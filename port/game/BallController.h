@@ -23,8 +23,8 @@ public:
 	void addObjectShadow(hgr::Node* shadow, hgr::Node* owner, bool onlyNearGround = false);
 
 	void update(float dt, float forward, float turn, bool jump);
-	void setModernInput(bool modern, float mx, float my, float camYaw, float camPitch, bool followPath = false) {
-		m_modernReq = modern; m_mx = mx; m_my = my; m_dCamYaw += camYaw; m_dCamPitch += camPitch; m_followPath = followPath;
+	void setModernInput(bool modern, float mx, float my, float camYaw, float camPitch, bool followPath = false, bool autoFollow = false) {
+		m_modernReq = modern; m_mx = mx; m_my = my; m_dCamYaw += camYaw; m_dCamPitch += camPitch; m_followPath = followPath; m_autoFollow = autoFollow;
 	}
 	bool modern() const { return m_modern; }
 	bool controllable() const;
@@ -105,6 +105,8 @@ private:
 	Vec3 m_camUp = Vec3(0, 1, 0);
 	bool m_modernReq = false, m_modern = false;
 	bool m_followPath = false;
+	bool m_autoFollow = false;
+	float m_autoFollowBlend = 0.f;
 	float m_eyeDistLocal = 0.f;
 	float m_mx = 0.f, m_my = 0.f, m_dCamYaw = 0.f, m_dCamPitch = 0.f;
 	float m_camYaw = 0.f, m_camPitch = 0.59f;

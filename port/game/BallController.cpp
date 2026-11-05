@@ -629,6 +629,19 @@ void BallController::update(float dt, float forward, float turn, bool jump) {
 				m_camYaw += std::max(-maxStep, std::min(maxStep, step));
 			}
 		}
+		m_autoFollowBlend += ((m_autoFollow ? 1.f : 0.f) - m_autoFollowBlend) * std::min(1.f, dt * 2.f);
+		if (m_autoFollowBlend > 0.01f && !m_cinematic && m_rail < 0) {
+			const Vec3 hv(m_ball.velocity.x, 0.f, m_ball.velocity.z);
+			const float sp = hv.length();
+			const Vec3 cf(sinf(m_camYaw), 0, cosf(m_camYaw));
+			if (sp > 120.f && hv.dot(cf) > -0.3f * sp) {
+				float d = atan2f(hv.x, hv.z) - m_camYaw;
+				while (d > 3.14159265f) d -= 6.2831853f;
+				while (d < -3.14159265f) d += 6.2831853f;
+				const float rate = 1.4f * m_autoFollowBlend * std::min(1.f, sp / 500.f);
+				m_camYaw += std::max(-1.2f * dt, std::min(1.2f * dt, d * std::min(1.f, dt * rate)));
+			}
+		}
 	}
 	m_dCamYaw = m_dCamPitch = 0.f;
 	Vec3 heading(sinf(m_yaw), 0, cosf(m_yaw));
