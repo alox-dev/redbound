@@ -1,4 +1,5 @@
 #pragma once
+#include "SceneTarget.h"
 #include "AmbientSounds.h"
 #include "FadeOverlay.h"
 #include "Hud.h"
@@ -72,6 +73,9 @@ private:
 	bool m_mouseLook = false;
 	int m_mouseTravel = 0;
 	int m_stickNav = 0;
+	SceneTarget m_sceneTarget;
+	float m_fps = 0.f, m_fpsTime = 0.f;
+	int m_fpsFrames = 0;
 	bool m_freeFly = false;
 	bool m_followGameCamera = true;
 	bool m_helpersVisible = false;

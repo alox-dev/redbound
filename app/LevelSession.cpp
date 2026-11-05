@@ -511,12 +511,22 @@ void LevelSession::update(float dt, float realDt) {
 void LevelSession::render(float realDt, bool paused, bool liveBlur) {
 	hgr::Camera* cam = activeCamera();
 	const int w = m_app.width, h = m_app.height;
+	const float scale = std::max(0.5f, std::min(1.f, Config::get().num("graphics.render_scale", 1.f)));
+	const int sw = std::max(1, (int)(w * scale)), sh = std::max(1, (int)(h * scale));
+	const bool scaled = scale < 0.99f && m_sceneTarget.begin(sw, sh);
+	const int rw = scaled ? sw : w, rh = scaled ? sh : h;
+	if (scaled) m_ctx->setDefaultFramebuffer(m_sceneTarget.framebuffer(), sh);
 	m_ctx->beginScene();
-	m_water->update(cam, w, h, m_ctx->time, 0xFF6688AA);
-	m_ctx->setViewport(gr::Rect(0, 0, w, h));
+	m_water->update(cam, rw, rh, m_ctx->time, 0xFF6688AA);
+	m_ctx->setViewport(gr::Rect(0, 0, rw, rh));
 	m_ctx->clear(m_clearColor);
-	m_sky.draw(cam, w, h);
+	m_sky.draw(cam, rw, rh);
 	cam->render(m_ctx);
+	if (scaled) {
+		m_ctx->setDefaultFramebuffer(0);
+		m_sceneTarget.end(w, h);
+		m_ctx->setViewport(gr::Rect(0, 0, w, h));
+	}
 	if (m_followGameCamera) {
 		const bool attractionDemo = !m_player && m_world->getVariable("attraction") == 1.f;
 		m_fade.draw(m_world->fadeAmount(), attractionDemo || m_world->fadeColor() != 0);
@@ -537,6 +547,11 @@ void LevelSession::render(float realDt, bool paused, bool liveBlur) {
 		ui.begin(w, h);
 		m_hud.draw(ui, *m_world, m_player.get(), paused, m_results, m_menu.isOpen(), realDt);
 		m_hud.drawLogo(ui, paused, realDt);
+		if (Config::get().flag("graphics.show_fps", false)) {
+			char fps[32];
+			snprintf(fps, sizeof(fps), "%d", (int)(m_fps + 0.5f));
+			ui.drawString("FONT", fps, ui.width() - 18.f, ui.height() - 22.f, 2, 1);
+		}
 		m_menu.draw(ui);
 		ui.end();
 	}
@@ -575,6 +590,13 @@ SessionResult LevelSession::run() {
 		}
 		const Uint32 now = SDL_GetTicks();
 		const float realDt = std::min(0.1f, (now - last) / 1000.f);
+		m_fpsFrames++;
+		m_fpsTime += (now - last) / 1000.f;
+		if (m_fpsTime >= 0.5f) {
+			m_fps = m_fpsFrames / m_fpsTime;
+			m_fpsFrames = 0;
+			m_fpsTime = 0.f;
+		}
 		last = now;
 		const bool paused = (m_menu.isOpen() && m_player && !m_results) || m_app.overlay->open();
 		const bool liveBlur = (m_menu.isOpen() || m_results) && !paused;
@@ -583,6 +605,11 @@ SessionResult LevelSession::run() {
 		m_ctx->time += dt;
 		update(dt, realDt);
 		render(realDt, paused, liveBlur);
+		const int fpsLimit = (int)Config::get().num("graphics.fps_limit", 0.f);
+		if (fpsLimit > 0) {
+			const Uint32 frameMs = 1000 / (Uint32)fpsLimit, spent = SDL_GetTicks() - now;
+			if (spent < frameMs) SDL_Delay(frameMs - spent);
+		}
 		++m_frame;
 		if (!m_options.screenshot.empty() && m_frame >= (m_options.frames > 0 ? m_options.frames : 3)) {
 			printf(m_ctx->saveScreenshot(m_options.screenshot) ? "screenshot: %s\n" : "could not save %s\n", m_options.screenshot.c_str());

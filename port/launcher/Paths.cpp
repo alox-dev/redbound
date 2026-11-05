@@ -1,5 +1,6 @@
 #include "Paths.h"
 #include <cstdlib>
+#include <cstdio>
 #include <sys/stat.h>
 #ifdef _WIN32
 #include <direct.h>
@@ -47,6 +48,28 @@ std::string userConfigDir() {
 	const std::string xdg = fromEnv("XDG_CONFIG_HOME");
 	const std::string home = fromEnv("HOME");
 	return (xdg.empty() ? (home.empty() ? std::string(".") : home) + "/.config" : xdg) + "/redbound";
+#endif
+}
+
+std::string picturesDir() {
+#ifdef _WIN32
+	const std::string profile = fromEnv("USERPROFILE");
+	return (profile.empty() ? userDataDir() : profile + "\\Pictures") + "\\Redbound";
+#else
+	std::string dir = fromEnv("XDG_PICTURES_DIR");
+#ifndef __ANDROID__
+	if (dir.empty()) {
+		if (FILE* p = popen("xdg-user-dir PICTURES 2>/dev/null", "r")) {
+			char line[1024] = "";
+			if (fgets(line, sizeof(line), p)) dir = line;
+			pclose(p);
+			while (!dir.empty() && (dir.back() == '\n' || dir.back() == '\r')) dir.pop_back();
+		}
+	}
+#endif
+	const std::string home = fromEnv("HOME");
+	if (dir.empty() || dir == home) dir = (home.empty() ? std::string(".") : home) + "/Pictures";
+	return dir + "/Redbound";
 #endif
 }
 

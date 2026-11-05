@@ -1,0 +1,86 @@
+# Redbound port menu: Italian
+language.name = Italiano
+
+tab.game = Gioco
+tab.controls = Comandi
+tab.graphics = Grafica
+tab.audio = Audio
+tab.improvements = Miglioramenti
+tab.about = Informazioni
+
+button.continue = Continua
+button.quit_game = Esci dal gioco
+button.quit = Esci
+
+game.welcome = Scegli il tuo pacchetto di Bounce Evolution (.deb) per iniziare.
+game.section_data = Dati del gioco
+game.status = Stato
+game.data_ok = Pronti
+game.data_missing = Non importati
+game.folder = Cartella
+game.choose_deb = Scegli il .deb...
+game.import_another = Importa un altro .deb...
+game.picker_title = Scegli il .deb di Bounce Evolution
+game.picker_waiting = In attesa del file...
+game.picker_failed = Impossibile aprire il selettore di file.
+game.nothing_chosen = Nessun file scelto.
+game.no_picker = Nessun file scelto. Puoi anche eseguire: redbound --import-deb file.deb
+game.importing = Importazione...
+game.imported = Importati: %d file.
+game.restart_needed = Riavvia per usarli.
+game.import_failed = Impossibile importare %s: %s
+game.copy_by_usb = Oppure copialo via USB in: %s
+game.unknown_version = Versione del pacchetto sconosciuta (SHA-256 %s); potrebbe non funzionare correttamente.
+game.section_records = Record del livello 2
+game.records_clear = Cancella i record
+game.records_confirm = Tocca di nuovo per cancellare i record
+game.section_language = Lingua
+game.language = Lingua
+game.language_auto = Del sistema
+
+controls.section_camera = Telecamera
+controls.camera_sensitivity = Sensibilità
+controls.invert_y = Inverti asse verticale
+controls.section_controllers = Controller
+controls.deadzone = Zona morta delle levette
+controls.vibration = Vibrazione
+controls.connected = Collegati
+controls.none_connected = Nessuno
+controls.section_touch = Schermo tattile
+controls.accelerometer = Accelerometro (sperimentale)
+controls.tilt_sensitivity = Sensibilità dell'inclinazione
+controls.tilt_invert_x = Inverti inclinazione laterale
+controls.tilt_invert_y = Inverti inclinazione in avanti
+controls.tilt_camera = Telecamera
+controls.tilt_camera_follow = Segue il percorso
+controls.tilt_camera_fixed = Fissa
+controls.calibrate = Ricalibra
+controls.calibrated = Calibrato.
+
+graphics.section_display = Schermo
+graphics.fullscreen = Schermo intero
+graphics.vsync = Sincronizzazione verticale
+graphics.resolution = Risoluzione
+graphics.section_performance = Prestazioni
+graphics.render_scale = Scala di rendering
+graphics.fps_limit = Limite FPS
+graphics.fps_unlimited = Illimitato
+graphics.show_fps = Mostra FPS
+
+audio.section = Suono
+audio.section_music = Musica
+audio.section_sounds = Effetti sonori
+audio.mute = Disattiva audio
+audio.volume = Volume
+
+improvements.section = Miglioramenti del port
+improvements.visible_sections = Mostra tutto il livello
+
+about.version = Versione %s
+about.by = Di Alox, realizzato con Claude (Anthropic)
+about.section_community = Comunità
+about.section_original = Gioco originale
+about.original = Bounce Evolution, di Rovio Mobile e Nokia (2009).
+about.not_affiliated = Non affiliato con Nokia né con Rovio.
+about.libraries = Librerie
+about.license = GNU General Public License v2
