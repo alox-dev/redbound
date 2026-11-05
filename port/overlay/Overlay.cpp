@@ -224,9 +224,37 @@ std::string Overlay::saveScreenshot() {
 	return path;
 }
 
+float Overlay::labelWidth(const std::string& text, float heightPx) const {
+	if (!m_ready) return 0.f;
+	ImFont* font = ImGui::GetIO().Fonts->Fonts.empty() ? nullptr : ImGui::GetIO().Fonts->Fonts[0];
+	if (!font) return 0.f;
+	return font->CalcTextSizeA(heightPx, FLT_MAX, 0.f, text.c_str()).x;
+}
+
+void Overlay::drawLabels() {
+	ImDrawList* list = ImGui::GetForegroundDrawList();
+	ImFont* font = ImGui::GetFont();
+	for (const Label& l : m_labels) {
+		const ImVec2 size = font->CalcTextSizeA(l.heightPx, FLT_MAX, 0.f, l.text.c_str());
+		const ImVec2 pos(l.rightPx - size.x, l.centerYPx - size.y * 0.5f);
+		const float shadow = std::max(1.f, l.heightPx * 0.08f);
+		list->AddText(font, l.heightPx, ImVec2(pos.x + shadow, pos.y + shadow), IM_COL32(20, 30, 45, 220), l.text.c_str());
+		list->AddText(font, l.heightPx, pos, IM_COL32(255, 255, 255, 255), l.text.c_str());
+	}
+}
+
 void Overlay::draw() {
 	if (!m_ready) return;
 	if (m_open) drawMenu();
+	else if (!m_labels.empty()) {
+		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplSDL2_NewFrame();
+		ImGui::NewFrame();
+		drawLabels();
+		ImGui::Render();
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	}
+	m_labels.clear();
 	if (m_screenshotRequested) {
 		m_screenshotRequested = false;
 		saveScreenshot();
@@ -274,6 +302,7 @@ void Overlay::drawMenu() {
 		if (ImGui::Button(tr("button.quit_game"), ImVec2(bw, 0)) && onQuit) onQuit();
 	}
 	ImGui::End();
+	drawLabels();
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }

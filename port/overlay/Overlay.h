@@ -45,6 +45,16 @@ private:
 	bool m_screenshotRequested = false;
 	bool m_confirmClear = false;
 	void drawMenu();
+	void drawLabels();
+	struct Label {
+		std::string text;
+		float rightPx = 0.f, centerYPx = 0.f, heightPx = 0.f;
+	};
+	std::vector<Label> m_labels;
+public:
+	void addLabel(const std::string& text, float rightPx, float centerYPx, float heightPx) { m_labels.push_back({ text, rightPx, centerYPx, heightPx }); }
+	float labelWidth(const std::string& text, float heightPx) const;
+private:
 	std::string saveScreenshot();
 	int m_titleW = 0, m_titleH = 0;
 	float m_scale = 1.f;
