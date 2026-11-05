@@ -79,4 +79,21 @@ public class RedboundActivity extends SDLActivity {
             }
         }).start();
     }
+
+    public static String resolveUrl(String address) {
+        try {
+            java.net.HttpURLConnection connection = (java.net.HttpURLConnection) new java.net.URL(address).openConnection();
+            connection.setRequestMethod("HEAD");
+            connection.setInstanceFollowRedirects(true);
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
+            connection.setRequestProperty("User-Agent", "Redbound");
+            connection.getResponseCode();
+            String result = connection.getURL().toString();
+            connection.disconnect();
+            return result;
+        } catch (Exception e) {
+            return "";
+        }
+    }
 }

@@ -11,7 +11,7 @@ help texts.
 
 | Section | Contents | Configuration keys |
 | --- | --- | --- |
-| Game | Game data status and folder, import another `.deb`, level 2 records (view and clear), language | `general.language` |
+| Game | Game data status and folder, import another `.deb`, updates, level 2 records (view and clear), language | `general.language`, `general.check_updates` |
 | Controls | Camera sensitivity and vertical inversion; controller dead zone, vibration and connected controllers; on touch devices, the experimental accelerometer and its options | `controls.*` |
 | Graphics | Fullscreen, vertical sync, current resolution; render scale, FPS limit, FPS counter | `graphics.*` |
 | Audio | General, music and sound effects, each with mute and volume | `audio.*` |
@@ -32,11 +32,30 @@ name is shown as text.
 | F11 | Fullscreen on or off (saved as `graphics.fullscreen`) |
 | F2 | Screenshot of the whole window, saved as `redbound-YYYYMMDD-HHMMSS.png` in the pictures folder: `Pictures/Redbound` (Linux, following `xdg-user-dir PICTURES`) or `%USERPROFILE%\Pictures\Redbound` (Windows) |
 
+## Notifications
+
+Short notices appear at the top right for a few seconds, stacked up to four, with an icon and a fade: the welcome
+message with the shortcut to this menu, a saved screenshot, a controller connected or disconnected, a change of input
+device (keyboard, keyboard and mouse, controller, touch screen, accelerometer; at most one every 1.5 s), cleared
+records, accelerometer calibration and an available update. They are drawn after the F2 screenshot is taken, so they
+never appear in screenshots, and are also written to the log.
+
+## Updates
+
+With `general.check_updates` on, the game checks once per launch, in the background, whether a newer release exists.
+It requests `https://github.com/alox-dev/redbound/releases/latest` (headers only) and reads the version from the
+redirect to `/releases/tag/vX.Y.Z`, which always points to the latest regular release (drafts and pre-releases are
+skipped) and is not subject to the GitHub API rate limit. Versions are compared numerically (`1.10.0` is newer than
+`1.9.0`). No data about the player or the device is sent beyond a normal web request. When a newer version exists, a
+notice appears and the Updates section offers a Download button that opens the release page. Windows uses WinHTTP,
+Linux `curl` (or `wget`), and Android the platform's HTTP client, which needs the `INTERNET` permission.
+
 ## Icons
 
 The community buttons use icons from Font Awesome Free 6.7.2 (icons CC BY 4.0, font SIL OFL 1.1), subset to the four
 glyphs in use: `assets/fonts/icons-brands.ttf` (Discord, GitHub, YouTube) and `assets/fonts/icons-solid.ttf` (the mug
-used for Ko-fi, which has no Font Awesome logo). They are merged into the menu font at startup; the license is in
+used for Ko-fi, which has no Font Awesome logo, and the notification icons). Their code points are in
+`port/overlay/Icons.h`. They are merged into the menu font at startup; the license is in
 `assets/fonts/LICENSE-FontAwesome.txt`.
 
 ## Layout
@@ -54,6 +73,7 @@ font is taken from the system (fontconfig on Linux, Roboto or Noto on Android) s
 | Key | Values |
 | --- | --- |
 | `general.language` | `auto` (system language) or a language code |
+| `general.check_updates` | `1` / `0`: look for a newer release at startup (default on) |
 | `graphics.vsync`, `graphics.fullscreen`, `graphics.show_fps` | `1` / `0` |
 | `graphics.render_scale` | `0.5` to `1`: the scene is drawn at this fraction of the window size and stretched; the HUD and menus stay sharp. Shaders that need the render size (the water reflection's `TEXEL_OFFSET`) receive the size of the scaled image |
 | `graphics.fps_limit` | `0` (unlimited), `30`, `60`, `120` |

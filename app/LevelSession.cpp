@@ -1,4 +1,7 @@
 #include "LevelSession.h"
+#include "Icons.h"
+#include "I18n.h"
+#include <cstdarg>
 #include "AppContext.h"
 #include "Audio.h"
 #include "BallController.h"
@@ -240,6 +243,12 @@ void LevelSession::setupCamera() {
 	}
 }
 
+static std::string formatText(const char* fmt, const char* value) {
+	char buffer[256];
+	snprintf(buffer, sizeof(buffer), fmt, value);
+	return buffer;
+}
+
 void LevelSession::pauseForBackground() {
 	if (!m_audio->paused()) printf("app: in the background, game paused and audio muted\n");
 	m_audio->setPaused(true);
@@ -310,6 +319,12 @@ void LevelSession::handleEvents() {
 				m_audio->setPaused(false);
 				printf("app: back in the foreground, audio resumed\n");
 			}
+		}
+		if (e.type == SDL_CONTROLLERDEVICEADDED) {
+			const char* name = SDL_GameControllerNameForIndex(e.cdevice.which);
+			m_app.overlay->notify(formatText(tr("notice.controller_connected"), name ? name : "?"), icon::gamepad);
+		} else if (e.type == SDL_CONTROLLERDEVICEREMOVED) {
+			m_app.overlay->notify(tr("notice.controller_disconnected"), icon::gamepad);
 		}
 		if (m_app.overlay->processEvent(e)) continue;
 		if (m_player && !m_menu.isOpen() && !m_results) m_input.handleTouch(e, m_app.width, m_app.height);
@@ -584,6 +599,14 @@ SessionResult LevelSession::run() {
 	while (m_running) {
 		handleEvents();
 		if (m_mouseLook && !mouseCaptureAllowed()) setMouseCapture(false);
+		switch (m_input.takeDeviceChange()) {
+		case PlayerInput::Device::Keyboard: m_app.overlay->notify(tr("notice.input_keyboard"), icon::keyboard); break;
+		case PlayerInput::Device::Mouse: m_app.overlay->notify(tr("notice.input_mouse"), icon::mouse); break;
+		case PlayerInput::Device::Controller: m_app.overlay->notify(tr("notice.input_controller"), icon::gamepad); break;
+		case PlayerInput::Device::Touch: m_app.overlay->notify(tr("notice.input_touch"), icon::hand); break;
+		case PlayerInput::Device::Tilt: m_app.overlay->notify(tr("notice.input_tilt"), icon::phone); break;
+		default: break;
+		}
 		if (!m_running) break;
 		int dw, dh;
 		SDL_GL_GetDrawableSize(m_app.window, &dw, &dh);

@@ -21,6 +21,8 @@ class PlayerInput {
 public:
 	static std::string touchScheme();
 	void setMouseCaptured(bool captured) { m_mouseCaptured = captured; }
+	enum class Device { None, Keyboard, Mouse, Controller, Touch, Tilt };
+	Device takeDeviceChange();
 	void handleTouch(const SDL_Event& e, int width, int height);
 	void resetTouch();
 	void addMouseOrbit(float dx, float dy) { m_orbitX += dx; m_orbitY += dy; }
@@ -40,6 +42,8 @@ private:
 	float m_lookPendingX = 0.f, m_lookPendingY = 0.f;
 	Uint32 m_lastLookTime = 0;
 	bool m_mouseCaptured = false;
+	Device m_device = Device::None, m_reported = Device::None, m_pending = Device::None;
+	Uint32 m_lastReport = 0;
 	Uint32 m_lastTap = 0;
 	int m_jumpFrames = 0;
 	float m_flickTime = 0.f, m_flickX = 0.f, m_flickY = 0.f;
