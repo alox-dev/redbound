@@ -49,3 +49,10 @@ Base: https://github.com/pent0/ka3d (GPL v2), patched by `third_party/ka3d-patch
 | `ParticleSystem::renderGLES2` | particles on OpenGL ES |
 | Sorting by bounding box center and a conservative culling radius | transparency order (eyes, leaves) and objects vanishing up close |
 | Debug-only assert and include case fixes | build on Linux |
+
+## Render targets
+
+`GLES2_Context::setRenderTarget` caches one framebuffer per texture. OpenGL reuses the name of a deleted texture,
+so the cache entry is released when its texture is destroyed and rebuilt whenever it belongs to a different texture
+or size; otherwise a recreated target (the water reflection after a render scale change) would keep drawing into the
+deleted texture. Textures register with their context, which detaches them when it is destroyed first.
