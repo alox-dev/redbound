@@ -91,7 +91,7 @@ The APK bundles `assets/lang` and SDL_GameControllerDB. The Java side is SDL's `
 
 ## Release builds
 
-Versions follow semantic versioning, `MAJOR.MINOR.PATCH` (current: `1.0.0`). The number comes from
+Versions follow semantic versioning, `MAJOR.MINOR.PATCH` (current: `1.1.0`). The number comes from
 `project(... VERSION ...)` in `CMakeLists.txt` and `versionName` in `platforms/android/app/build.gradle`; both must be
 updated together, and `versionCode` increased for every Android release. Artifacts are named
 `redbound-<version>-<platform>-<arch>`.

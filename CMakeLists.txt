@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(redbound VERSION 1.0.0 LANGUAGES C CXX)
+project(redbound VERSION 1.1.0 LANGUAGES C CXX)
 set(REDBOUND_VERSION_STRING "${PROJECT_VERSION}")
 
 option(REDBOUND_ASAN "Build with AddressSanitizer" OFF)
