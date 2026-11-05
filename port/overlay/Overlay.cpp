@@ -28,10 +28,13 @@
 #include "stb_image_write.h"
 #include "Paths.h"
 #include "Records.h"
+#include "Icons.h"
+#include "UpdateCheck.h"
 #include <ctime>
 
 namespace redbound {
 static bool mergeIconFont(const char* relative, const ImWchar* ranges, float size);
+static std::string format(const char* fmt, ...);
 }
 
 namespace redbound {
@@ -125,7 +128,8 @@ bool Overlay::init(SDL_Window* win, SDL_GLContext ctx) {
 		io.FontGlobalScale = std::max(1.f, m_scale * 1.5f);
 	}
 	static const ImWchar brands[] = { 0xf09b, 0xf09b, 0xf167, 0xf167, 0xf392, 0xf392, 0 };
-	static const ImWchar solid[] = { 0xf7b6, 0xf7b6, 0 };
+	static const ImWchar solid[] = { 0xf00c, 0xf00c, 0xf030, 0xf030, 0xf05a, 0xf05a, 0xf0aa, 0xf0aa, 0xf11b, 0xf11c, 0xf1f8, 0xf1f8,
+	                                 0xf25a, 0xf25a, 0xf3cf, 0xf3cf, 0xf7b6, 0xf7b6, 0xf8cc, 0xf8cc, 0 };
 	const float iconPx = font.empty() ? 13.f : fontPx;
 	m_icons = mergeIconFont("fonts/icons-brands.ttf", brands, iconPx) && mergeIconFont("fonts/icons-solid.ttf", solid, iconPx);
 	const float scale = m_scale;
@@ -152,6 +156,7 @@ bool Overlay::init(SDL_Window* win, SDL_GLContext ctx) {
 	if (!ImGui_ImplOpenGL3_Init("#version 100")) return false;
 	loadTitle();
 	m_ready = true;
+	if (Config::get().flag("general.check_updates", true)) startUpdateCheck(REDBOUND_VERSION);
 	Strings::get().load(Config::get().str("general.language", "auto"));
 	printf("port menu: ready (Esc, Back/View/- or a three finger tap), %.0f dpi, font %.0f px%s%s, language %s\n", ddpi, fontPx,
 	       m_compact ? ", compact" : "", font.empty() ? " (no system font)" : "", Strings::get().current().c_str());
@@ -221,6 +226,7 @@ std::string Overlay::saveScreenshot() {
 		return std::string();
 	}
 	printf("screenshot: %s\n", path.c_str());
+	notify(tr("notice.screenshot"), icon::camera);
 	return path;
 }
 
@@ -243,14 +249,75 @@ void Overlay::drawLabels() {
 	}
 }
 
+void Overlay::notify(const std::string& text, const char* glyph, float seconds) {
+	for (Notice& n : m_notices)
+		if (n.text == text) {
+			n.age = std::min(n.age, 0.2f);
+			return;
+		}
+	if (m_notices.size() >= 4) m_notices.erase(m_notices.begin());
+	m_notices.push_back({ text, glyph ? glyph : icon::info, 0.f, seconds });
+	printf("notice: %s\n", text.c_str());
+}
+
+void Overlay::drawNotices() {
+	if (m_notices.empty()) return;
+	const Uint32 now = SDL_GetTicks();
+	const float dt = m_lastNoticeTicks ? std::min(0.1f, (now - m_lastNoticeTicks) / 1000.f) : 0.f;
+	m_lastNoticeTicks = now;
+	ImDrawList* list = ImGui::GetForegroundDrawList();
+	ImFont* font = ImGui::GetFont();
+	const float size = ImGui::GetFontSize() * 0.95f;
+	const float pad = 10.f * m_scale, gap = 8.f * m_scale, margin = 16.f * m_scale, accent = 3.f * m_scale;
+	const ImVec2 display = ImGui::GetIO().DisplaySize;
+	float y = margin;
+	for (Notice& n : m_notices) {
+		n.age += dt;
+		const float in = std::min(1.f, n.age / 0.25f), out = std::min(1.f, std::max(0.f, (n.life - n.age) / 0.4f));
+		const float alpha = std::min(in, out), ease = 1.f - (1.f - in) * (1.f - in);
+		if (alpha <= 0.f) continue;
+		const ImVec2 iconSize = m_icons ? font->CalcTextSizeA(size, FLT_MAX, 0.f, n.icon.c_str()) : ImVec2(0, 0);
+		const ImVec2 textSize = font->CalcTextSizeA(size, FLT_MAX, 0.f, n.text.c_str());
+		const float iconWidth = m_icons ? iconSize.x + pad * 0.8f : 0.f;
+		const float w = pad * 2.f + accent + iconWidth + textSize.x, h = pad * 1.6f + textSize.y;
+		const float x = display.x - margin - w + (1.f - ease) * 24.f * m_scale;
+		const ImU32 a = (ImU32)(alpha * 255.f);
+		list->AddRectFilled(ImVec2(x, y), ImVec2(x + w, y + h), IM_COL32(16, 24, 38, (int)(a * 0.9f)), 8.f * m_scale);
+		list->AddRectFilled(ImVec2(x, y), ImVec2(x + accent, y + h), IM_COL32(242, 89, 77, a), 8.f * m_scale, ImDrawFlags_RoundCornersLeft);
+		float tx = x + accent + pad;
+		const float ty = y + (h - textSize.y) * 0.5f;
+		if (m_icons) {
+			list->AddText(font, size, ImVec2(tx, ty), IM_COL32(242, 89, 77, a), n.icon.c_str());
+			tx += iconWidth;
+		}
+		list->AddText(font, size, ImVec2(tx, ty), IM_COL32(255, 255, 255, a), n.text.c_str());
+		y += h * std::min(1.f, out * 2.f) + gap;
+	}
+	m_notices.erase(std::remove_if(m_notices.begin(), m_notices.end(), [](const Notice& n) { return n.age >= n.life; }), m_notices.end());
+	if (m_notices.empty()) m_lastNoticeTicks = 0;
+}
+
 void Overlay::draw() {
 	if (!m_ready) return;
+	if (!m_welcomed) {
+		m_welcomed = true;
+#ifdef __ANDROID__
+		notify(format(tr("notice.welcome_touch"), REDBOUND_VERSION), icon::info, 5.f);
+#else
+		notify(format(tr("notice.welcome_desktop"), REDBOUND_VERSION), icon::info, 5.f);
+#endif
+	}
+	if (!m_updateNotified && updateState() == UpdateState::Available) {
+		m_updateNotified = true;
+		notify(format(tr("notice.update_available"), latestVersion().c_str()), icon::update, 7.f);
+	}
 	if (m_open) drawMenu();
-	else if (!m_labels.empty()) {
+	else if (!m_labels.empty() || !m_notices.empty()) {
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL2_NewFrame();
 		ImGui::NewFrame();
 		drawLabels();
+		drawNotices();
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 	}
@@ -303,6 +370,7 @@ void Overlay::drawMenu() {
 	}
 	ImGui::End();
 	drawLabels();
+	drawNotices();
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
@@ -595,6 +663,24 @@ void Overlay::drawGame() {
 	}
 	ImGui::Spacing();
 	drawImportButton(ok);
+	section(tr("game.section_updates"));
+	if (beginRows("updates")) {
+		if (checkRow(tr("game.check_updates"), "general.check_updates", true) && Config::get().flag("general.check_updates", true))
+			startUpdateCheck(REDBOUND_VERSION);
+		row(tr("game.update_status"));
+		const UpdateState state = updateState();
+		if (!Config::get().flag("general.check_updates", true) && state == UpdateState::Idle) ImGui::TextDisabled("%s", tr("game.update_disabled"));
+		else if (state == UpdateState::Checking || state == UpdateState::Idle) ImGui::TextDisabled("%s", tr("game.update_checking"));
+		else if (state == UpdateState::UpToDate) ImGui::TextColored(ImVec4(0.5f, 0.9f, 0.5f, 1), "%s", tr("game.update_latest"));
+		else if (state == UpdateState::Failed) ImGui::TextDisabled("%s", tr("game.update_failed"));
+		else {
+			ImGui::TextColored(kAccent, tr("game.update_available"), latestVersion().c_str());
+			row("");
+			const std::string label = m_icons ? std::string(icon::update) + "  " + tr("game.update_download") : std::string(tr("game.update_download"));
+			if (ImGui::Button(label.c_str(), ImVec2(-FLT_MIN, 0))) SDL_OpenURL(latestReleaseUrl().c_str());
+		}
+		ImGui::EndTable();
+	}
 	section(tr("game.section_records"));
 	const std::vector<int> records = arcadeRecords();
 	if (beginRows("records")) {
@@ -614,6 +700,7 @@ void Overlay::drawGame() {
 			if (m_confirmClear) {
 				clearArcadeRecords();
 				m_confirmClear = false;
+				notify(tr("notice.records_cleared"), icon::trash);
 			} else {
 				m_confirmClear = true;
 			}
@@ -670,7 +757,7 @@ void Overlay::drawControls() {
 			row("");
 			if (ImGui::Button(tr("controls.calibrate"), ImVec2(-FLT_MIN, 0)) && onCalibrate) {
 				onCalibrate();
-				m_status = tr("controls.calibrated");
+				notify(tr("controls.calibrated"), icon::phone);
 			}
 		}
 		ImGui::EndTable();
@@ -777,10 +864,10 @@ void Overlay::drawAbout() {
 	section(tr("about.section_community"));
 	struct Link { const char* icon; const char* label; const char* url; };
 	const Link links[] = {
-		{ "\xef\x8e\x92", "Discord", "https://discord.gg/WXe65ENvwq" },
-		{ "\xef\x82\x9b", "GitHub", "https://github.com/alox-dev/redbound" },
-		{ "\xef\x85\xa7", "YouTube", "https://www.youtube.com/@aloxdev" },
-		{ "\xef\x9e\xb6", "Ko-fi", "https://ko-fi.com/aloxdev" },
+		{ icon::discord, "Discord", "https://discord.gg/WXe65ENvwq" },
+		{ icon::github, "GitHub", "https://github.com/alox-dev/redbound" },
+		{ icon::youtube, "YouTube", "https://www.youtube.com/@aloxdev" },
+		{ icon::mug, "Ko-fi", "https://ko-fi.com/aloxdev" },
 	};
 	const int perRow = m_compact && ImGui::GetContentRegionAvail().x < 520.f * m_scale ? 2 : 4;
 	const float spacing = ImGui::GetStyle().ItemSpacing.x;

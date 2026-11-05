@@ -707,7 +707,8 @@ void GLES2_Shader::applyUniforms(const GLES2_PassProgram& p) {
 			}
 			if (!t) {
 				std::string key = m_fx->name + "|" + n;
-				if (m_ctx->warnedSamplers.insert(key).second) {
+				const bool generatedAtRuntime = n == "REFLMAP" || n == "REFRACMAP";
+				if (!generatedAtRuntime && m_ctx->warnedSamplers.insert(key).second) {
 					std::string have;
 					for (std::map<std::string, Value>::const_iterator i = m_values.begin(); i != m_values.end(); ++i)
 						if (i->second.kind == Value::TEX) have += (have.empty() ? "" : ", ") + i->first;

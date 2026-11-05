@@ -1,5 +1,5 @@
 set(IMGUI ${PROJECT_SOURCE_DIR}/third_party/imgui)
-add_library(redbound_overlay STATIC Overlay.cpp Config.cpp AndroidBridge.cpp I18n.cpp
+add_library(redbound_overlay STATIC Overlay.cpp UpdateCheck.cpp Config.cpp AndroidBridge.cpp I18n.cpp
 	${IMGUI}/imgui.cpp ${IMGUI}/imgui_draw.cpp ${IMGUI}/imgui_tables.cpp ${IMGUI}/imgui_widgets.cpp
 	${IMGUI}/backends/imgui_impl_sdl2.cpp ${IMGUI}/backends/imgui_impl_opengl3.cpp)
 target_include_directories(redbound_overlay PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${IMGUI})
@@ -9,7 +9,7 @@ target_compile_definitions(redbound_overlay PRIVATE REDBOUND_VERSION="${REDBOUND
 target_link_libraries(redbound_overlay PUBLIC redbound_launcher redbound_audio redbound_image redbound_sdl2 redbound_gles)
 target_include_directories(redbound_overlay PRIVATE ${PROJECT_SOURCE_DIR}/third_party/stb)
 if(WIN32)
-  target_link_libraries(redbound_overlay PUBLIC comdlg32)
+  target_link_libraries(redbound_overlay PUBLIC comdlg32 winhttp)
 endif()
 if(NOT ANDROID)
   target_compile_definitions(redbound_overlay PRIVATE REDBOUND_LANG_DIR="${PROJECT_SOURCE_DIR}/assets/lang" REDBOUND_ASSETS_DIR="${PROJECT_SOURCE_DIR}/assets")
