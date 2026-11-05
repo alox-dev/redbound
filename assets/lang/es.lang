@@ -60,6 +60,8 @@ graphics.vsync = Sincronización vertical
 graphics.resolution = Resolución
 
 audio.section = Sonido
+audio.section_music = Música
+audio.section_sounds = Efectos de sonido
 audio.mute = Silenciar
 audio.volume = Volumen
 

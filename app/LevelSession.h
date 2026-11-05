@@ -90,6 +90,7 @@ private:
 	void setupCamera();
 	void handleEvents();
 	bool handlePauseEvent(const SDL_Event& e);
+	void pauseForBackground();
 	bool mouseCaptureAllowed() const;
 	void setMouseCapture(bool capture);
 	void handleMenuAction(MenuAction action);

@@ -3,6 +3,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -25,7 +26,13 @@ public:
 	void stopMusic();
 
 	void setMuted(bool m) { m_muted = m; }
-	void setMasterVolume(float v) { m_master = v < 0.f ? 0.f : (v > 1.f ? 1.f : v); }
+	void setMasterVolume(float v) { m_master = clamp01(v); }
+	void setMusicMuted(bool m) { m_musicMuted = m; }
+	void setMusicVolume(float v) { m_musicVolume = clamp01(v); }
+	void setSoundsMuted(bool m) { m_soundsMuted = m; }
+	void setSoundsVolume(float v) { m_soundsVolume = clamp01(v); }
+	void setPaused(bool p) { m_paused = p; }
+	bool paused() const { return m_paused; }
 	bool muted() const { return m_muted; }
 	bool ok() const { return m_dev != 0; }
 
@@ -39,8 +46,9 @@ private:
 	std::vector<Voice> m_voices;
 	mutable std::mutex m_mutex;
 	int m_nextId = 1;
-	bool m_muted = false;
-	float m_master = 1.f;
+	static float clamp01(float v) { return v < 0.f ? 0.f : (v > 1.f ? 1.f : v); }
+	std::atomic<bool> m_muted{ false }, m_musicMuted{ false }, m_soundsMuted{ false }, m_paused{ false };
+	std::atomic<float> m_master{ 1.f }, m_musicVolume{ 1.f }, m_soundsVolume{ 1.f };
 
 	std::shared_ptr<Clip> load(const std::string& name);
 	static void callback(void* user, Uint8* stream, int len);

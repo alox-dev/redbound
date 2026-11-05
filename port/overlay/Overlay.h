@@ -7,6 +7,8 @@ namespace redbound {
 
 class Audio;
 
+void applyAudioSettings(Audio& audio);
+
 class Overlay {
 public:
 	bool init(SDL_Window* win, SDL_GLContext ctx);

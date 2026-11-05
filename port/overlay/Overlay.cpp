@@ -559,14 +559,37 @@ void Overlay::drawGraphics() {
 	}
 }
 
-void Overlay::drawAudio() {
+void applyAudioSettings(Audio& audio) {
 	Config& c = Config::get();
+	audio.setMuted(c.flag("audio.mute", false));
+	audio.setMasterVolume(c.num("audio.volume", 1.f));
+	audio.setMusicMuted(c.flag("audio.music_mute", false));
+	audio.setMusicVolume(c.num("audio.music_volume", 1.f));
+	audio.setSoundsMuted(c.flag("audio.sounds_mute", false));
+	audio.setSoundsVolume(c.num("audio.sounds_volume", 1.f));
+}
+
+void Overlay::drawAudio() {
+	bool changed = false;
 	section(tr("audio.section"));
-	if (beginRows("sound")) {
-		if (checkRow(tr("audio.mute"), "audio.mute", false) && m_audio) m_audio->setMuted(c.flag("audio.mute", false));
-		if (sliderRow(tr("audio.volume"), "audio.volume", 1.f, 0.f, 1.f, "%.2f") && m_audio) m_audio->setMasterVolume(c.num("audio.volume", 1.f));
+	if (beginRows("general")) {
+		changed |= checkRow(tr("audio.mute"), "audio.mute", false);
+		changed |= sliderRow(tr("audio.volume"), "audio.volume", 1.f, 0.f, 1.f, "%.2f");
 		ImGui::EndTable();
 	}
+	section(tr("audio.section_music"));
+	if (beginRows("music")) {
+		changed |= checkRow(tr("audio.mute"), "audio.music_mute", false);
+		changed |= sliderRow(tr("audio.volume"), "audio.music_volume", 1.f, 0.f, 1.f, "%.2f");
+		ImGui::EndTable();
+	}
+	section(tr("audio.section_sounds"));
+	if (beginRows("sounds")) {
+		changed |= checkRow(tr("audio.mute"), "audio.sounds_mute", false);
+		changed |= sliderRow(tr("audio.volume"), "audio.sounds_volume", 1.f, 0.f, 1.f, "%.2f");
+		ImGui::EndTable();
+	}
+	if (changed && m_audio) applyAudioSettings(*m_audio);
 }
 
 void Overlay::drawImprovements() {
