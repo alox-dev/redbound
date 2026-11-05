@@ -62,8 +62,9 @@ MinGW.
 ## Android
 
 The Gradle project in `platforms/android/` (Gradle 8.7, Android Gradle plugin 8.5.2; Android Studio is not needed)
-compiles the root `CMakeLists.txt` into `libmain.so` together with SDL2. Minimum Android 11 (API 30), `arm64-v8a`,
-application id `io.github.alox_dev.redbound`.
+compiles the root `CMakeLists.txt` into `libmain.so` together with SDL2. Minimum Android 11 (API 30), application id
+`io.github.alox_dev.redbound`. One APK carries both architectures, `arm64-v8a` (64-bit) and `armeabi-v7a` (32-bit,
+for phones such as the Samsung Galaxy S5); Android installs the matching one.
 
 Requirements: JDK 17 or 21 (newer JDKs are not supported by the Android Gradle plugin yet), Android SDK with
 platform-tools, `platforms;android-34`, `build-tools;34.0.0`, `ndk;26.1.10909125` and `cmake;3.22.1`. With the
@@ -128,7 +129,7 @@ cd platforms/android
 ./gradlew assembleRelease
 ```
 
-The signed APK is `app/build/outputs/apk/release/redbound-<version>-android-arm64.apk`. Without
+The signed APK is `app/build/outputs/apk/release/redbound-<version>-android.apk`, with both architectures. Without
 `keystore.properties` the release build falls back to the debug key.
 
 ### Windows
