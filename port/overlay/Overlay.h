@@ -1,5 +1,6 @@
 #pragma once
 #include <SDL.h>
+#include <vector>
 #include <functional>
 #include <string>
 
@@ -46,6 +47,15 @@ private:
 	bool m_confirmClear = false;
 	void drawMenu();
 	void drawLabels();
+	void drawNotices();
+	struct Notice {
+		std::string text, icon;
+		float age = 0.f, life = 3.5f;
+	};
+	std::vector<Notice> m_notices;
+	Uint32 m_lastNoticeTicks = 0;
+	bool m_updateNotified = false;
+	bool m_welcomed = false;
 	struct Label {
 		std::string text;
 		float rightPx = 0.f, centerYPx = 0.f, heightPx = 0.f;
@@ -53,6 +63,7 @@ private:
 	std::vector<Label> m_labels;
 public:
 	void addLabel(const std::string& text, float rightPx, float centerYPx, float heightPx) { m_labels.push_back({ text, rightPx, centerYPx, heightPx }); }
+	void notify(const std::string& text, const char* glyph = nullptr, float seconds = 3.5f);
 	float labelWidth(const std::string& text, float heightPx) const;
 private:
 	std::string saveScreenshot();

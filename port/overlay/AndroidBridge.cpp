@@ -57,6 +57,28 @@ std::string androidExternalDir() {
 	return p ? p : "";
 }
 
+std::string androidResolveUrl(const std::string& url) {
+	JNIEnv* env = (JNIEnv*)SDL_AndroidGetJNIEnv();
+	jclass c = env ? activityClass(env) : 0;
+	if (!c) return "";
+	std::string body;
+	jmethodID m = env->GetStaticMethodID(c, "resolveUrl", "(Ljava/lang/String;)Ljava/lang/String;");
+	if (m) {
+		jstring address = env->NewStringUTF(url.c_str());
+		jstring result = (jstring)env->CallStaticObjectMethod(c, m, address);
+		if (env->ExceptionCheck()) env->ExceptionClear();
+		if (result) {
+			const char* chars = env->GetStringUTFChars(result, 0);
+			if (chars) body = chars;
+			env->ReleaseStringUTFChars(result, chars);
+			env->DeleteLocalRef(result);
+		}
+		env->DeleteLocalRef(address);
+	}
+	env->DeleteLocalRef(c);
+	return body;
+}
+
 }
 #else
 namespace redbound {
@@ -64,5 +86,6 @@ bool androidPickDeb() { return false; }
 bool androidPicking() { return false; }
 std::string androidTakePicked() { return ""; }
 std::string androidExternalDir() { return ""; }
+std::string androidResolveUrl(const std::string&) { return ""; }
 }
 #endif

@@ -9,6 +9,14 @@ namespace redbound {
 
 static float clampUnit(float v) { return std::max(-1.f, std::min(1.f, v)); }
 
+PlayerInput::Device PlayerInput::takeDeviceChange() {
+	if (m_pending == Device::None || m_pending == m_reported || SDL_GetTicks() - m_lastReport < 1500) return Device::None;
+	m_reported = m_pending;
+	m_pending = Device::None;
+	m_lastReport = SDL_GetTicks();
+	return m_reported;
+}
+
 std::string PlayerInput::touchScheme() { return Config::get().flag("controls.accelerometer", false) ? "accelerometer" : "gestures"; }
 
 void PlayerInput::registerTap(const Finger& f, float x, float y, int width, int height) {
@@ -144,6 +152,8 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 	if (k[SDL_SCANCODE_A] || k[SDL_SCANCODE_LEFT] || k[SDL_SCANCODE_KP_4] || k[SDL_SCANCODE_4]) turn -= 1.f;
 	const bool keyboard = forward != 0.f || turn != 0.f;
 	bool jump = k[SDL_SCANCODE_SPACE] || k[SDL_SCANCODE_KP_5] || k[SDL_SCANCODE_KP_0] || k[SDL_SCANCODE_5] || k[SDL_SCANCODE_0];
+	const bool keyboardJump = jump;
+	bool jumpPad = false;
 	const float deadzone = cfg.num("controls.deadzone", 0.22f);
 	float lx = 0.f, ly = 0.f, rx = 0.f, ry = 0.f;
 	bool dpad = false;
@@ -165,7 +175,7 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 		if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_DOWN)) { forward -= 1.f; dpad = true; }
 		if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) { turn += 1.f; dpad = true; }
 		if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_DPAD_LEFT)) { turn -= 1.f; dpad = true; }
-		if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_A) || SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_B)) jump = true;
+		if (SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_A) || SDL_GameControllerGetButton(pad, SDL_CONTROLLER_BUTTON_B)) jump = jumpPad = true;
 	}
 	for (SDL_Joystick* js : devices.joysticks()) {
 		if (!SDL_JoystickGetAttached(js)) continue;
@@ -237,6 +247,16 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 	turn = clampUnit(turn);
 	const bool sticks = lx != 0.f || ly != 0.f || rx != 0.f || ry != 0.f;
 	const bool mouseOrbit = m_orbitX != 0.f || m_orbitY != 0.f;
+	Device used = Device::None;
+	if (tilt) used = Device::Tilt;
+	else if (touchActive) used = Device::Touch;
+	else if (mouseOrbit || (m_mouseCaptured && keyboard)) used = Device::Mouse;
+	else if (dpad || sticks || jumpPad) used = Device::Controller;
+	else if (keyboard || keyboardJump) used = Device::Keyboard;
+	if (used != Device::None && used != m_device) {
+		if (m_device != Device::None) m_pending = used;
+		m_device = used;
+	}
 	if (touchActive || mouseOrbit || (m_mouseCaptured && keyboard)) m_modern = true;
 	else if (dpad || keyboard) m_modern = false;
 	else if (sticks) m_modern = true;

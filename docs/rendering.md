@@ -50,6 +50,13 @@ Base: https://github.com/pent0/ka3d (GPL v2), patched by `third_party/ka3d-patch
 | Sorting by bounding box center and a conservative culling radius | transparency order (eyes, leaves) and objects vanishing up close |
 | Debug-only assert and include case fixes | build on Linux |
 
+## Runtime textures
+
+`REFLMAP` (and `REFRACMAP`) are not stored in the level: the water reflection is rendered every frame by
+`WaterReflection` and bound to those samplers when drawing. On frames without a reflection (the first frame, or the
+camera under the water level, where the original draws none either) they fall back to a neutral texture, so they are
+not reported as missing.
+
 ## Render targets
 
 `GLES2_Context::setRenderTarget` caches one framebuffer per texture. OpenGL reuses the name of a deleted texture,
