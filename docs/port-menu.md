@@ -11,12 +11,12 @@ help texts.
 
 | Section | Contents | Configuration keys |
 | --- | --- | --- |
-| Game | Game data status and folder, import another `.deb`, language | `general.language` |
+| Game | Game data status and folder, import another `.deb`, level 2 records (view and clear), language | `general.language` |
 | Controls | Camera sensitivity and vertical inversion; controller dead zone, vibration and connected controllers; on touch devices, the experimental accelerometer and its options | `controls.*` |
-| Graphics | Fullscreen, vertical sync, current resolution | `graphics.vsync`, `graphics.fullscreen` |
+| Graphics | Fullscreen, vertical sync, current resolution; render scale, FPS limit, FPS counter | `graphics.*` |
 | Audio | General, music and sound effects, each with mute and volume | `audio.*` |
 | Improvements | Show the whole level | `improvements.visible_sections` |
-| About | Title, version, credits, community links (Discord, GitHub, YouTube, Ko-fi), original game, libraries, license | |
+| About | Title, version, credits, community links with icons (Discord, GitHub, YouTube, Ko-fi), original game, libraries, license | |
 
 On first run, without game data, the menu shows the import screen instead of the tabs: the title, one line, the
 button to choose the `.deb` and the language.
@@ -24,6 +24,20 @@ button to choose the `.deb` and the language.
 The title image is `assets/title/title.png` (shipped next to the executable, or inside the APK). Images wider than
 1100 px are halved when loaded, so the texture stays within the 2048 px limit of older GPUs; without the file the
 name is shown as text.
+
+## Keys on desktop
+
+| Key | Action |
+| --- | --- |
+| F11 | Fullscreen on or off (saved as `graphics.fullscreen`) |
+| F2 | Screenshot of the whole window, saved as `redbound-YYYYMMDD-HHMMSS.png` in the pictures folder: `Pictures/Redbound` (Linux, following `xdg-user-dir PICTURES`) or `%USERPROFILE%\Pictures\Redbound` (Windows) |
+
+## Icons
+
+The community buttons use icons from Font Awesome Free 6.7.2 (icons CC BY 4.0, font SIL OFL 1.1), subset to the four
+glyphs in use: `assets/fonts/icons-brands.ttf` (Discord, GitHub, YouTube) and `assets/fonts/icons-solid.ttf` (the mug
+used for Ko-fi, which has no Font Awesome logo). They are merged into the menu font at startup; the license is in
+`assets/fonts/LICENSE-FontAwesome.txt`.
 
 ## Layout
 
@@ -40,7 +54,9 @@ font is taken from the system (fontconfig on Linux, Roboto or Noto on Android) s
 | Key | Values |
 | --- | --- |
 | `general.language` | `auto` (system language) or a language code |
-| `graphics.vsync`, `graphics.fullscreen` | `1` / `0` |
+| `graphics.vsync`, `graphics.fullscreen`, `graphics.show_fps` | `1` / `0` |
+| `graphics.render_scale` | `0.5` to `1`: the scene is drawn at this fraction of the window size and stretched; the HUD and menus stay sharp |
+| `graphics.fps_limit` | `0` (unlimited), `30`, `60`, `120` |
 | `audio.mute`, `audio.music_mute`, `audio.sounds_mute` | `1` / `0` (everything, music, sound effects) |
 | `audio.volume`, `audio.music_volume`, `audio.sounds_volume` | `0` to `1` |
 | `controls.camera_sensitivity` | `0.3` to `3` |
@@ -55,7 +71,7 @@ font is taken from the system (fontconfig on Linux, Roboto or Noto on Android) s
 
 ## Languages
 
-Texts live in `assets/lang/<code>.lang` as `key = text` lines (UTF-8; `\n` for line breaks; lines starting with `#`
+Included languages: English, Spanish, Portuguese, French and Italian. Texts live in `assets/lang/<code>.lang` as `key = text` lines (UTF-8; `\n` for line breaks; lines starting with `#`
 are ignored). `assets/lang/languages` lists the available codes. The system language is detected with SDL; missing
 keys fall back to English.
 

@@ -391,7 +391,7 @@ Texture* GLES2_Context::createTexture(const String& filename) {
 
 void GLES2_Context::setViewport(const Rect& r) {
 	m_viewport = r;
-	const int h = m_currentTarget ? m_currentTarget->height() : m_height;
+	const int h = m_currentTarget ? m_currentTarget->height() : (m_defaultFramebuffer && m_defaultFramebufferHeight > 0 ? m_defaultFramebufferHeight : m_height);
 	glViewport(r.left(), h - r.top() - r.height(), r.width(), r.height());
 }
 
@@ -420,7 +420,7 @@ void GLES2_Context::setPerspectiveProjection(float hfov, float front, float back
 void GLES2_Context::setRenderTarget(Texture* target) {
 	GLES2_Texture* t = dynamic_cast<GLES2_Texture*>(target);
 	if (!t) {
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glBindFramebuffer(GL_FRAMEBUFFER, m_defaultFramebuffer);
 		m_currentTarget = 0;
 		return;
 	}
@@ -434,7 +434,7 @@ void GLES2_Context::setRenderTarget(Texture* target) {
 		glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t->id(), 0);
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rt.depth);
 		const GLenum st = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-		if (st != GL_FRAMEBUFFER_COMPLETE) fprintf(stderr, "[gles2] framebuffer incompleto (0x%04x)\n", st);
+		if (st != GL_FRAMEBUFFER_COMPLETE) fprintf(stderr, "[gles2] framebuffer incomplete (0x%04x)\n", st);
 		rt.w = t->width();
 		rt.h = t->height();
 	}

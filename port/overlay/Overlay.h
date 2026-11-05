@@ -41,6 +41,11 @@ private:
 	void loadTitle();
 	void drawTitle(float maxWidth);
 	unsigned int m_titleTex = 0;
+	bool m_icons = false;
+	bool m_screenshotRequested = false;
+	bool m_confirmClear = false;
+	void drawMenu();
+	std::string saveScreenshot();
 	int m_titleW = 0, m_titleH = 0;
 	float m_scale = 1.f;
 	bool m_compact = false;

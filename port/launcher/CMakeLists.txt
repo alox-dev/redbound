@@ -1,5 +1,5 @@
 find_package(ZLIB REQUIRED)
-add_library(redbound_launcher STATIC DebImport.cpp Sha256.cpp Paths.cpp)
+add_library(redbound_launcher STATIC DebImport.cpp Sha256.cpp Paths.cpp Records.cpp)
 target_include_directories(redbound_launcher PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 set_target_properties(redbound_launcher PROPERTIES CXX_STANDARD 17)
 target_link_libraries(redbound_launcher PUBLIC ZLIB::ZLIB)

@@ -28,6 +28,5 @@ private:
 	void drawArcadeResults(Ui& ui, BallController& player, float alpha);
 };
 
-int recordArcadeScore(int meters, std::vector<int>& scores);
 
 }

@@ -23,6 +23,16 @@
 #include <cstdint>
 #include <GLES2/gl2.h>
 #include "stb_image.h"
+#define STB_IMAGE_WRITE_STATIC
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+#include "Paths.h"
+#include "Records.h"
+#include <ctime>
+
+namespace redbound {
+static bool mergeIconFont(const char* relative, const ImWchar* ranges, float size);
+}
 
 namespace redbound {
 
@@ -110,7 +120,14 @@ bool Overlay::init(SDL_Window* win, SDL_GLContext ctx) {
 	m_scale = fontPx / 22.f;
 	const std::string font = findFont();
 	if (!font.empty()) io.Fonts->AddFontFromFileTTF(font.c_str(), fontPx, 0, io.Fonts->GetGlyphRangesDefault());
-	else io.FontGlobalScale = std::max(1.f, m_scale * 1.5f);
+	else {
+		io.Fonts->AddFontDefault();
+		io.FontGlobalScale = std::max(1.f, m_scale * 1.5f);
+	}
+	static const ImWchar brands[] = { 0xf09b, 0xf09b, 0xf167, 0xf167, 0xf392, 0xf392, 0 };
+	static const ImWchar solid[] = { 0xf7b6, 0xf7b6, 0 };
+	const float iconPx = font.empty() ? 13.f : fontPx;
+	m_icons = mergeIconFont("fonts/icons-brands.ttf", brands, iconPx) && mergeIconFont("fonts/icons-solid.ttf", solid, iconPx);
 	const float scale = m_scale;
 	ImGui::StyleColorsDark();
 	ImGuiStyle& st = ImGui::GetStyle();
@@ -161,6 +178,19 @@ bool Overlay::processEvent(const SDL_Event& e) {
 	if (e.type == SDL_CONTROLLERBUTTONDOWN && e.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) toggle = true;
 	if (e.type == SDL_FINGERDOWN && SDL_GetNumTouchFingers(e.tfinger.touchId) >= 3) toggle = true;
 	if (toggle) { if (!m_importMode) m_open = !m_open; return true; }
+#ifndef __ANDROID__
+	if (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_F11) {
+		const bool full = (SDL_GetWindowFlags(m_win) & SDL_WINDOW_FULLSCREEN_DESKTOP) == 0;
+		SDL_SetWindowFullscreen(m_win, full ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+		Config::get().setFlag("graphics.fullscreen", full);
+		Config::get().save();
+		return true;
+	}
+	if (e.type == SDL_KEYDOWN && !e.key.repeat && e.key.keysym.sym == SDLK_F2) {
+		m_screenshotRequested = true;
+		return true;
+	}
+#endif
 	if (!m_open) return false;
 	ImGui_ImplSDL2_ProcessEvent(&e);
 	switch (e.type) {
@@ -169,8 +199,41 @@ bool Overlay::processEvent(const SDL_Event& e) {
 	}
 }
 
+std::string Overlay::saveScreenshot() {
+	int w = 0, h = 0;
+	SDL_GL_GetDrawableSize(m_win, &w, &h);
+	if (w <= 0 || h <= 0) return std::string();
+	std::vector<unsigned char> pixels((size_t)w * h * 4);
+	glPixelStorei(GL_PACK_ALIGNMENT, 1);
+	glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, &pixels[0]);
+	std::vector<unsigned char> rows((size_t)w * h * 3);
+	for (int y = 0; y < h; ++y)
+		for (int x = 0; x < w; ++x)
+			for (int c = 0; c < 3; ++c) rows[((size_t)(h - 1 - y) * w + x) * 3 + c] = pixels[((size_t)y * w + x) * 4 + c];
+	const std::string dir = picturesDir();
+	makeDirectories(dir);
+	const time_t now = time(0);
+	char name[64];
+	strftime(name, sizeof(name), "redbound-%Y%m%d-%H%M%S.png", localtime(&now));
+	const std::string path = dir + "/" + name;
+	if (!stbi_write_png(path.c_str(), w, h, 3, &rows[0], w * 3)) {
+		printf("screenshot: could not write %s\n", path.c_str());
+		return std::string();
+	}
+	printf("screenshot: %s\n", path.c_str());
+	return path;
+}
+
 void Overlay::draw() {
-	if (!m_ready || !m_open) return;
+	if (!m_ready) return;
+	if (m_open) drawMenu();
+	if (m_screenshotRequested) {
+		m_screenshotRequested = false;
+		saveScreenshot();
+	}
+}
+
+void Overlay::drawMenu() {
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplSDL2_NewFrame();
 	ImGui::NewFrame();
@@ -297,17 +360,17 @@ static void centeredText(const char* text, bool disabled = false) {
 	else ImGui::TextUnformatted(text);
 }
 
-void Overlay::loadTitle() {
+static std::vector<unsigned char> readAsset(const std::string& relative) {
 	std::vector<std::string> paths;
 #ifdef __ANDROID__
-	paths.push_back("title/title.png");
+	paths.push_back(relative);
 #else
 	if (char* base = SDL_GetBasePath()) {
-		paths.push_back(std::string(base) + "assets/title/title.png");
+		paths.push_back(std::string(base) + "assets/" + relative);
 		SDL_free(base);
 	}
 #ifdef REDBOUND_ASSETS_DIR
-	paths.push_back(std::string(REDBOUND_ASSETS_DIR) + "/title/title.png");
+	paths.push_back(std::string(REDBOUND_ASSETS_DIR) + "/" + relative);
 #endif
 #endif
 	for (const std::string& path : paths) {
@@ -317,10 +380,31 @@ void Overlay::loadTitle() {
 		std::vector<unsigned char> bytes(size > 0 ? (size_t)size : 0);
 		const bool read = size > 0 && SDL_RWread(rw, &bytes[0], 1, (size_t)size) == (size_t)size;
 		SDL_RWclose(rw);
-		if (!read) continue;
+		if (read) return bytes;
+	}
+	return std::vector<unsigned char>();
+}
+
+static bool mergeIconFont(const char* relative, const ImWchar* ranges, float size) {
+	std::vector<unsigned char> bytes = readAsset(relative);
+	if (bytes.empty()) return false;
+	void* data = IM_ALLOC(bytes.size());
+	memcpy(data, &bytes[0], bytes.size());
+	ImFontConfig cfg;
+	cfg.MergeMode = true;
+	cfg.PixelSnapH = true;
+	cfg.GlyphMinAdvanceX = size;
+	cfg.FontDataOwnedByAtlas = true;
+	return ImGui::GetIO().Fonts->AddFontFromMemoryTTF(data, (int)bytes.size(), size * 0.9f, &cfg, ranges) != nullptr;
+}
+
+void Overlay::loadTitle() {
+	{
+		std::vector<unsigned char> bytes = readAsset("title/title.png");
+		if (bytes.empty()) return;
 		int w = 0, h = 0, n = 0;
 		unsigned char* pixels = stbi_load_from_memory(&bytes[0], (int)bytes.size(), &w, &h, &n, 4);
-		if (!pixels) continue;
+		if (!pixels) return;
 		std::vector<unsigned char> image(pixels, pixels + (size_t)w * h * 4);
 		stbi_image_free(pixels);
 		while (w > 1100 && w >= 2 && h >= 2) {
@@ -348,7 +432,6 @@ void Overlay::loadTitle() {
 		m_titleTex = tex;
 		m_titleW = w;
 		m_titleH = h;
-		return;
 	}
 }
 
@@ -483,6 +566,32 @@ void Overlay::drawGame() {
 	}
 	ImGui::Spacing();
 	drawImportButton(ok);
+	section(tr("game.section_records"));
+	const std::vector<int> records = arcadeRecords();
+	if (beginRows("records")) {
+		for (size_t i = 0; i < records.size(); ++i) {
+			char place[16], value[32];
+			snprintf(place, sizeof(place), "%d.", (int)i + 1);
+			snprintf(value, sizeof(value), "%d m", records[i]);
+			row(place);
+			ImGui::TextUnformatted(value);
+		}
+		ImGui::EndTable();
+	}
+	if (!arcadeRecordsAreDefault()) {
+		ImGui::Spacing();
+		const char* label = m_confirmClear ? tr("game.records_confirm") : tr("game.records_clear");
+		if (ImGui::Button(label, ImVec2(-FLT_MIN, 0))) {
+			if (m_confirmClear) {
+				clearArcadeRecords();
+				m_confirmClear = false;
+			} else {
+				m_confirmClear = true;
+			}
+		}
+	} else {
+		m_confirmClear = false;
+	}
 	section(tr("game.section_language"));
 	if (beginRows("language")) {
 		drawLanguage();
@@ -557,6 +666,35 @@ void Overlay::drawGraphics() {
 		ImGui::TextDisabled("%d x %d", w, h);
 		ImGui::EndTable();
 	}
+	section(tr("graphics.section_performance"));
+	if (beginRows("performance")) {
+		int percent = (int)(c.num("graphics.render_scale", 1.f) * 100.f + 0.5f);
+		row(tr("graphics.render_scale"));
+		if (ImGui::SliderInt("##render_scale", &percent, 50, 100, "%d%%")) {
+			c.setNum("graphics.render_scale", percent / 100.f);
+			c.save();
+		}
+		const int limits[] = { 0, 30, 60, 120 };
+		const int limit = (int)c.num("graphics.fps_limit", 0.f);
+		char current[32];
+		if (limit > 0) snprintf(current, sizeof(current), "%d", limit);
+		else snprintf(current, sizeof(current), "%s", tr("graphics.fps_unlimited"));
+		row(tr("graphics.fps_limit"));
+		if (ImGui::BeginCombo("##fps_limit", current)) {
+			for (int l : limits) {
+				char label[32];
+				if (l > 0) snprintf(label, sizeof(label), "%d", l);
+				else snprintf(label, sizeof(label), "%s", tr("graphics.fps_unlimited"));
+				if (ImGui::Selectable(label, l == limit)) {
+					c.setNum("graphics.fps_limit", (float)l);
+					c.save();
+				}
+			}
+			ImGui::EndCombo();
+		}
+		checkRow(tr("graphics.show_fps"), "graphics.show_fps", false);
+		ImGui::EndTable();
+	}
 }
 
 void applyAudioSettings(Audio& audio) {
@@ -608,19 +746,20 @@ void Overlay::drawAbout() {
 	centeredText(version.c_str(), true);
 	centeredText(tr("about.by"));
 	section(tr("about.section_community"));
-	struct Link { const char* label; const char* url; };
+	struct Link { const char* icon; const char* label; const char* url; };
 	const Link links[] = {
-		{ "Discord", "https://discord.gg/WXe65ENvwq" },
-		{ "GitHub", "https://github.com/alox-dev/redbound" },
-		{ "YouTube", "https://www.youtube.com/@aloxdev" },
-		{ "Ko-fi", "https://ko-fi.com/aloxdev" },
+		{ "\xef\x8e\x92", "Discord", "https://discord.gg/WXe65ENvwq" },
+		{ "\xef\x82\x9b", "GitHub", "https://github.com/alox-dev/redbound" },
+		{ "\xef\x85\xa7", "YouTube", "https://www.youtube.com/@aloxdev" },
+		{ "\xef\x9e\xb6", "Ko-fi", "https://ko-fi.com/aloxdev" },
 	};
 	const int perRow = m_compact && ImGui::GetContentRegionAvail().x < 520.f * m_scale ? 2 : 4;
 	const float spacing = ImGui::GetStyle().ItemSpacing.x;
 	const float bw = (ImGui::GetContentRegionAvail().x - spacing * (perRow - 1)) / perRow;
 	for (int i = 0; i < 4; ++i) {
 		if (i % perRow) ImGui::SameLine();
-		if (ImGui::Button(links[i].label, ImVec2(bw, 0))) SDL_OpenURL(links[i].url);
+		const std::string label = m_icons ? std::string(links[i].icon) + "  " + links[i].label : std::string(links[i].label);
+		if (ImGui::Button(label.c_str(), ImVec2(bw, 0))) SDL_OpenURL(links[i].url);
 	}
 	section(tr("about.section_original"));
 	ImGui::PushTextWrapPos(0.f);
@@ -640,6 +779,7 @@ void Overlay::drawAbout() {
 				{ "SDL_GameControllerDB", "zlib" },
 				{ "zlib", "zlib" },
 				{ "ANGLE", "BSD" },
+				{ "Font Awesome Free (icons)", "CC BY 4.0 / OFL" },
 			};
 			for (auto& r : rows) {
 				ImGui::TableNextRow();
