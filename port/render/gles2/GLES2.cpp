@@ -389,10 +389,19 @@ Texture* GLES2_Context::createTexture(const String& filename) {
 	return new GLES2_Texture(this, f.c_str());
 }
 
+int GLES2_Context::renderWidth() const {
+	if (m_currentTarget) return m_currentTarget->width();
+	return m_defaultFramebuffer && m_defaultFramebufferWidth > 0 ? m_defaultFramebufferWidth : m_width;
+}
+
+int GLES2_Context::renderHeight() const {
+	if (m_currentTarget) return m_currentTarget->height();
+	return m_defaultFramebuffer && m_defaultFramebufferHeight > 0 ? m_defaultFramebufferHeight : m_height;
+}
+
 void GLES2_Context::setViewport(const Rect& r) {
 	m_viewport = r;
-	const int h = m_currentTarget ? m_currentTarget->height() : (m_defaultFramebuffer && m_defaultFramebufferHeight > 0 ? m_defaultFramebufferHeight : m_height);
-	glViewport(r.left(), h - r.top() - r.height(), r.width(), r.height());
+	glViewport(r.left(), renderHeight() - r.top() - r.height(), r.width(), r.height());
 }
 
 void GLES2_Context::setPerspectiveProjection(float hfov, float front, float back, float aspect) {
@@ -709,7 +718,7 @@ void GLES2_Shader::applyUniforms(const GLES2_PassProgram& p) {
 		} else if (n == "FOG_COLOR") {
 			tmp[0] = m_ctx->fogColor.x; tmp[1] = m_ctx->fogColor.y; tmp[2] = m_ctx->fogColor.z; tmp[3] = m_ctx->fogColor.w; data = tmp;
 		} else if (n == "TEXEL_OFFSET") {
-			tmp[0] = 1.f / m_ctx->width(); tmp[1] = 1.f / m_ctx->height(); tmp[2] = tmp[3] = 0.f; data = tmp;
+			tmp[0] = 1.f / m_ctx->renderWidth(); tmp[1] = 1.f / m_ctx->renderHeight(); tmp[2] = tmp[3] = 0.f; data = tmp;
 		} else {
 			float d = 0.f;
 			if (n == "ALPHA_FACTOR" || n == "DIFFUSEC" || n == "LIGHTC0") d = 1.f;

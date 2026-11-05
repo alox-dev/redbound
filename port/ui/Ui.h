@@ -24,6 +24,7 @@ public:
 	int spriteWidth(const std::string& sheet, const std::string& name) const;
 	int spriteHeight(const std::string& sheet, const std::string& name) const;
 	int stringWidth(const std::string& font, const std::string& text) const;
+	float scale() const { return m_scale; }
 	bool hasSprite(const std::string& sheet, const std::string& name) const;
 	void captureScreen();
 	bool hasCapture() const { return m_capTex != 0 && m_haveCap; }

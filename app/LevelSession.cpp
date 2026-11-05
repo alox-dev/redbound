@@ -515,7 +515,7 @@ void LevelSession::render(float realDt, bool paused, bool liveBlur) {
 	const int sw = std::max(1, (int)(w * scale)), sh = std::max(1, (int)(h * scale));
 	const bool scaled = scale < 0.99f && m_sceneTarget.begin(sw, sh);
 	const int rw = scaled ? sw : w, rh = scaled ? sh : h;
-	if (scaled) m_ctx->setDefaultFramebuffer(m_sceneTarget.framebuffer(), sh);
+	if (scaled) m_ctx->setDefaultFramebuffer(m_sceneTarget.framebuffer(), sw, sh);
 	m_ctx->beginScene();
 	m_water->update(cam, rw, rh, m_ctx->time, 0xFF6688AA);
 	m_ctx->setViewport(gr::Rect(0, 0, rw, rh));
@@ -550,7 +550,11 @@ void LevelSession::render(float realDt, bool paused, bool liveBlur) {
 		if (Config::get().flag("graphics.show_fps", false)) {
 			char fps[32];
 			snprintf(fps, sizeof(fps), "%d", (int)(m_fps + 0.5f));
-			ui.drawString("FONT", fps, ui.width() - 18.f, ui.height() - 22.f, 2, 1);
+			const float labelPx = 17.f * ui.scale();
+			const float labelWidth = m_app.overlay->labelWidth("FPS", labelPx) / ui.scale();
+			const float right = ui.width() - 18.f, centerY = ui.height() - 22.f;
+			ui.drawString("FONT", fps, right - labelWidth - 6.f, centerY, 2, 1);
+			m_app.overlay->addLabel("FPS", right * ui.scale(), (centerY + 2.f) * ui.scale(), labelPx);
 		}
 		m_menu.draw(ui);
 		ui.end();
