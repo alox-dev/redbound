@@ -236,9 +236,11 @@ private:
 	std::map<GLuint, Target> m_targets;
 	Texture* m_currentTarget;
 	unsigned m_defaultFramebuffer = 0;
-	int m_defaultFramebufferHeight = 0;
+	int m_defaultFramebufferWidth = 0, m_defaultFramebufferHeight = 0;
 public:
-	void setDefaultFramebuffer(unsigned fbo, int height = 0) { m_defaultFramebuffer = fbo; m_defaultFramebufferHeight = height; }
+	void setDefaultFramebuffer(unsigned fbo, int width = 0, int height = 0) { m_defaultFramebuffer = fbo; m_defaultFramebufferWidth = width; m_defaultFramebufferHeight = height; }
+	int renderWidth() const;
+	int renderHeight() const;
 private:
 	std::map<std::string, GLuint> m_neutral;
 	std::string m_shaderDir, m_textureDir;

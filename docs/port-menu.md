@@ -55,8 +55,11 @@ font is taken from the system (fontconfig on Linux, Roboto or Noto on Android) s
 | --- | --- |
 | `general.language` | `auto` (system language) or a language code |
 | `graphics.vsync`, `graphics.fullscreen`, `graphics.show_fps` | `1` / `0` |
-| `graphics.render_scale` | `0.5` to `1`: the scene is drawn at this fraction of the window size and stretched; the HUD and menus stay sharp |
+| `graphics.render_scale` | `0.5` to `1`: the scene is drawn at this fraction of the window size and stretched; the HUD and menus stay sharp. Shaders that need the render size (the water reflection's `TEXEL_OFFSET`) receive the size of the scaled image |
 | `graphics.fps_limit` | `0` (unlimited), `30`, `60`, `120` |
+
+The FPS counter draws the number with the game font and the "FPS" label with the menu font, because the original
+font only has the digits, `.`, `/`, `:`, `m` and `s` used by the HUD.
 | `audio.mute`, `audio.music_mute`, `audio.sounds_mute` | `1` / `0` (everything, music, sound effects) |
 | `audio.volume`, `audio.music_volume`, `audio.sounds_volume` | `0` to `1` |
 | `controls.camera_sensitivity` | `0.3` to `3` |
