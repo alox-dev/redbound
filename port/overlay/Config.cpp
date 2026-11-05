@@ -22,6 +22,19 @@ void Config::load() {
 		m_v[s.substr(0, eq)] = s.substr(eq + 1);
 	}
 	fclose(f);
+	migrate();
+}
+
+void Config::migrate() {
+	bool changed = false;
+	const auto touch = m_v.find("controls.touch");
+	if (touch != m_v.end()) {
+		if (touch->second == "accelerometer") m_v["controls.accelerometer"] = "1";
+		m_v.erase(touch);
+		changed = true;
+	}
+	for (const char* obsolete : { "controls.scheme", "controls.touch_swap_sides" }) changed = m_v.erase(obsolete) > 0 || changed;
+	if (changed) save();
 }
 
 void Config::save() const {

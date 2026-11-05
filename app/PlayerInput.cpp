@@ -23,6 +23,23 @@ void PlayerInput::registerTap(const Finger& f, float x, float y, int width, int 
 	}
 }
 
+static bool fingerStillDown(SDL_FingerID id) {
+	for (int d = 0; d < SDL_GetNumTouchDevices(); ++d) {
+		const SDL_TouchID touch = SDL_GetTouchDevice(d);
+		for (int i = 0; i < SDL_GetNumTouchFingers(touch); ++i)
+			if (SDL_Finger* f = SDL_GetTouchFinger(touch, i))
+				if (f->id == id) return true;
+	}
+	return false;
+}
+
+void PlayerInput::resetTouch() {
+	m_move.active = m_look.active = false;
+	m_lookPendingX = m_lookPendingY = 0.f;
+	m_holdYawSpeed = 0.f;
+	m_flickTime = 0.f;
+}
+
 void PlayerInput::handleTouch(const SDL_Event& e, int width, int height) {
 	if (touchScheme() != "gestures") return;
 	if (e.type == SDL_FINGERDOWN) {
@@ -38,6 +55,11 @@ void PlayerInput::handleTouch(const SDL_Event& e, int width, int height) {
 	} else if (e.type == SDL_FINGERMOTION) {
 		Finger* f = m_move.active && e.tfinger.fingerId == m_move.id ? &m_move : m_look.active && e.tfinger.fingerId == m_look.id ? &m_look : nullptr;
 		if (!f) return;
+		if (f == &m_look) {
+			m_lookPendingX += e.tfinger.x - f->x;
+			m_lookPendingY += e.tfinger.y - f->y;
+			m_lastLookTime = SDL_GetTicks();
+		}
 		f->x = e.tfinger.x;
 		f->y = e.tfinger.y;
 		if (std::hypot((f->x - f->startX) * width, (f->y - f->startY) * height) > height * 0.06f) f->swiping = true;
@@ -164,6 +186,11 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 		for (int b = 0; b < std::min(2, SDL_JoystickNumButtons(js)); ++b)
 			if (SDL_JoystickGetButton(js, b)) jump = true;
 	}
+	if (touchScheme() != "gestures") resetTouch();
+	if (SDL_GetNumTouchDevices() > 0) {
+		if (m_move.active && !fingerStillDown(m_move.id)) m_move.active = false;
+		if (m_look.active && !fingerStillDown(m_look.id)) m_look.active = false;
+	}
 	float touchX = 0.f, touchY = 0.f, holdTarget = 0.f;
 	bool touchActive = m_look.active;
 	if (m_move.active) {
@@ -176,29 +203,19 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 			if (std::fabs(touchY) < 0.12f) touchY = 0.f;
 		} else if (SDL_GetTicks() - m_move.restTime > 200) {
 			holdTarget = m_move.restX > 0.5f ? 1.f : -1.f;
+			m_lastLookTime = SDL_GetTicks();
 		}
 	}
 	m_holdYawSpeed += (holdTarget * 1.8f - m_holdYawSpeed) * std::min(1.f, dt * 10.f);
 	if (holdTarget == 0.f && std::fabs(m_holdYawSpeed) < 0.01f) m_holdYawSpeed = 0.f;
-	float lookStickX = 0.f, lookStickY = 0.f;
-	if (m_look.active) {
-		const float radius = height * 0.10f;
-		auto shape = [](float v) {
-			const float a = std::fabs(v);
-			if (a < 0.15f) return 0.f;
-			const float t = (a - 0.15f) / 0.85f;
-			return (v < 0.f ? -1.f : 1.f) * t * t;
-		};
-		lookStickX = shape(clampUnit((m_look.x - m_look.startX) * width / radius));
-		lookStickY = shape(clampUnit((m_look.y - m_look.startY) * height / radius));
-	}
-	m_lookRateX += (lookStickX - m_lookRateX) * std::min(1.f, dt * 12.f);
-	m_lookRateY += (lookStickY - m_lookRateY) * std::min(1.f, dt * 12.f);
-	if (lookStickX == 0.f && std::fabs(m_lookRateX) < 0.01f) m_lookRateX = 0.f;
-	if (lookStickY == 0.f && std::fabs(m_lookRateY) < 0.01f) m_lookRateY = 0.f;
+	const float lookBlend = std::min(1.f, dt * 18.f);
+	const float lookX = m_lookPendingX * lookBlend, lookY = m_lookPendingY * lookBlend;
+	m_lookPendingX -= lookX;
+	m_lookPendingY -= lookY;
 	const float lookSensitivity = cfg.num("controls.camera_sensitivity", 1.f);
-	const float lookYaw = (m_lookRateX * 1.5f + m_holdYawSpeed) * lookSensitivity * dt;
-	const float lookPitch = m_lookRateY * 1.0f * lookSensitivity * dt * (cfg.flag("controls.invert_y", false) ? -1.f : 1.f);
+	const float aspect = height > 0 ? (float)width / (float)height : 1.f;
+	const float lookYaw = (lookX * 3.14159265f + m_holdYawSpeed * dt) * lookSensitivity;
+	const float lookPitch = lookY * 1.6f / std::max(1.f, aspect * 0.5f) * lookSensitivity * (cfg.flag("controls.invert_y", false) ? -1.f : 1.f);
 	if (m_flickTime > 0.f) {
 		m_flickTime -= dt;
 		touchX = m_flickX;
@@ -248,6 +265,7 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 	cmd.jump = jump;
 	cmd.modern = m_modern;
 	cmd.followPath = tilt && cfg.str("controls.tilt_camera", "follow") == "follow";
+	cmd.autoFollow = m_move.active && m_move.swiping && SDL_GetTicks() - m_lastLookTime > 1000;
 	return cmd;
 }
 
