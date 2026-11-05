@@ -20,7 +20,7 @@ android {
         versionCode 2
         versionName '1.1.0'
         ndk {
-            abiFilters 'arm64-v8a'
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
         }
         externalNativeBuild {
             cmake {
@@ -57,7 +57,7 @@ android {
 
     applicationVariants.all { variant ->
         variant.outputs.all {
-            outputFileName = "redbound-${variant.versionName}-android-arm64${variant.buildType.name == 'release' ? '' : '-' + variant.buildType.name}.apk"
+            outputFileName = "redbound-${variant.versionName}-android${variant.buildType.name == 'release' ? '' : '-' + variant.buildType.name}.apk"
         }
     }
 
