@@ -31,8 +31,9 @@ static void checkGL(const char* where) {
 static bool isPow2(int v) { return v > 0 && (v & (v - 1)) == 0; }
 
 GLES2_Texture::GLES2_Texture(GLES2_Context* ctx, const String& filename) :
-	m_id(0), m_width(1), m_height(1), m_loaded(false)
+	m_owner(ctx), m_id(0), m_width(1), m_height(1), m_loaded(false)
 {
+	if (m_owner) m_owner->registerTexture(this);
 	redbound::Image img;
 	std::string path = filename.c_str();
 	if (!redbound::loadImage(path, img)) {
@@ -68,9 +69,10 @@ GLES2_Texture::GLES2_Texture(GLES2_Context* ctx, const String& filename) :
 	++ctx->texturesLoaded;
 }
 
-GLES2_Texture::GLES2_Texture(GLES2_Context*, int width, int height) :
-	m_id(0), m_width(width), m_height(height), m_loaded(true)
+GLES2_Texture::GLES2_Texture(GLES2_Context* ctx, int width, int height) :
+	m_owner(ctx), m_id(0), m_width(width), m_height(height), m_loaded(true)
 {
+	if (m_owner) m_owner->registerTexture(this);
 	glGenTextures(1, &m_id);
 	glBindTexture(GL_TEXTURE_2D, m_id);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
@@ -97,7 +99,20 @@ void GLES2_Texture::createChecker() {
 }
 
 GLES2_Texture::~GLES2_Texture() {
+	if (m_owner) {
+		if (m_id) m_owner->releaseTarget(m_id);
+		m_owner->unregisterTexture(this);
+	}
 	if (m_id) glDeleteTextures(1, &m_id);
+}
+
+void GLES2_Context::releaseTarget(unsigned textureId) {
+	auto it = m_targets.find(textureId);
+	if (it == m_targets.end()) return;
+	if (it->second.fbo) glDeleteFramebuffers(1, &it->second.fbo);
+	if (it->second.depth) glDeleteRenderbuffers(1, &it->second.depth);
+	if (m_currentTarget && dynamic_cast<GLES2_Texture*>(m_currentTarget) && static_cast<GLES2_Texture*>(m_currentTarget)->id() == textureId) m_currentTarget = 0;
+	m_targets.erase(it);
 }
 
 void GLES2_Texture::blt(int x, int y, const void* data, int pitch, int w, int h, const SurfaceFormat& fmt, const void*, const SurfaceFormat&) {
@@ -226,6 +241,8 @@ GLES2_Context::GLES2_Context(int width, int height, PresentFunc present, void* u
 }
 
 GLES2_Context::~GLES2_Context() {
+	for (GLES2_Texture* t : m_textures) t->detachOwner();
+	m_textures.clear();
 	if (m_white) glDeleteTextures(1, &m_white);
 	if (m_gray) glDeleteTextures(1, &m_gray);
 	for (std::map<GLuint, Target>::iterator i = m_targets.begin(); i != m_targets.end(); ++i) {
@@ -434,7 +451,13 @@ void GLES2_Context::setRenderTarget(Texture* target) {
 		return;
 	}
 	Target& rt = m_targets[t->id()];
+	if (rt.fbo && (rt.texture != t || rt.w != t->width() || rt.h != t->height())) {
+		glDeleteFramebuffers(1, &rt.fbo);
+		glDeleteRenderbuffers(1, &rt.depth);
+		rt.fbo = rt.depth = 0;
+	}
 	if (!rt.fbo) {
+		rt.texture = t;
 		glGenFramebuffers(1, &rt.fbo);
 		glGenRenderbuffers(1, &rt.depth);
 		glBindRenderbuffer(GL_RENDERBUFFER, rt.depth);

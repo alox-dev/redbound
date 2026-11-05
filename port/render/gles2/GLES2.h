@@ -36,9 +36,11 @@ public:
 	void getData(void** bits, int* pitch) const { *bits = 0; *pitch = 0; }
 
 	GLuint id() const { return m_id; }
+	void detachOwner() { m_owner = nullptr; }
 	bool loaded() const { return m_loaded; }
 
 private:
+	GLES2_Context* m_owner = nullptr;
 	GLuint m_id;
 	int m_width, m_height;
 	bool m_loaded;
@@ -232,7 +234,7 @@ private:
 	PresentFunc m_present;
 	void* m_presentUser;
 	GLuint m_white, m_gray;
-	struct Target { GLuint fbo, depth; int w, h; };
+	struct Target { GLuint fbo, depth; int w, h; const Texture* texture; };
 	std::map<GLuint, Target> m_targets;
 	Texture* m_currentTarget;
 	unsigned m_defaultFramebuffer = 0;
@@ -240,6 +242,12 @@ private:
 public:
 	void setDefaultFramebuffer(unsigned fbo, int width = 0, int height = 0) { m_defaultFramebuffer = fbo; m_defaultFramebufferWidth = width; m_defaultFramebufferHeight = height; }
 	int renderWidth() const;
+	void releaseTarget(unsigned textureId);
+	void registerTexture(GLES2_Texture* t) { m_textures.insert(t); }
+	void unregisterTexture(GLES2_Texture* t) { m_textures.erase(t); }
+private:
+	std::set<GLES2_Texture*> m_textures;
+public:
 	int renderHeight() const;
 private:
 	std::map<std::string, GLuint> m_neutral;
