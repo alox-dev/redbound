@@ -742,8 +742,21 @@ void Overlay::drawControls() {
 #endif
 	section(tr("controls.section_touch"));
 	if (beginRows("touch")) {
-		checkRow(tr("controls.accelerometer"), "controls.accelerometer", false);
-		if (c.flag("controls.accelerometer", false)) {
+		const std::string scheme = c.str("controls.touch", "modern");
+		const char* keys[] = { "modern", "classic", "accelerometer" };
+		const char* labels[] = { tr("controls.touch_modern"), tr("controls.touch_classic"), tr("controls.touch_accelerometer") };
+		int current = 0;
+		for (int i = 0; i < 3; ++i) if (scheme == keys[i]) current = i;
+		row(tr("controls.touch"));
+		if (ImGui::BeginCombo("##touch", labels[current])) {
+			for (int i = 0; i < 3; ++i)
+				if (ImGui::Selectable(labels[i], i == current)) {
+					c.set("controls.touch", keys[i]);
+					c.save();
+				}
+			ImGui::EndCombo();
+		}
+		if (scheme == "accelerometer") {
 			sliderRow(tr("controls.tilt_sensitivity"), "controls.tilt_sensitivity", 1.f, 0.4f, 2.5f, "%.1f");
 			checkRow(tr("controls.tilt_invert_x"), "controls.tilt_invert_x", false);
 			checkRow(tr("controls.tilt_invert_y"), "controls.tilt_invert_y", false);
