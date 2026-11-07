@@ -85,7 +85,7 @@ font only has the digits, `.`, `/`, `:`, `m` and `s` used by the HUD.
 | `controls.camera_sensitivity` | `0.3` to `3` |
 | `controls.invert_y` | `1` / `0` |
 | `controls.deadzone` | `0.05` to `0.5` |
-| `controls.accelerometer` | `1` / `0` (experimental, off by default) |
+| `controls.touch` | `modern` (default), `classic`, `accelerometer` |
 | `controls.tilt_sensitivity` | `0.4` to `2.5` |
 | `controls.tilt_invert_x`, `controls.tilt_invert_y` | `1` / `0` |
 | `controls.tilt_camera` | `follow`, `fixed` |

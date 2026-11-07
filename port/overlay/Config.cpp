@@ -27,9 +27,14 @@ void Config::load() {
 
 void Config::migrate() {
 	bool changed = false;
+	const auto accelerometer = m_v.find("controls.accelerometer");
+	if (accelerometer != m_v.end()) {
+		if (accelerometer->second == "1") m_v["controls.touch"] = "accelerometer";
+		m_v.erase(accelerometer);
+		changed = true;
+	}
 	const auto touch = m_v.find("controls.touch");
-	if (touch != m_v.end()) {
-		if (touch->second == "accelerometer") m_v["controls.accelerometer"] = "1";
+	if (touch != m_v.end() && touch->second != "modern" && touch->second != "classic" && touch->second != "accelerometer") {
 		m_v.erase(touch);
 		changed = true;
 	}
