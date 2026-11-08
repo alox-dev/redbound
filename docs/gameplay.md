@@ -85,21 +85,20 @@ The other schemes keep the player controlled camera.
 
 Every chase camera (player controlled or guided) checks the line from Bounce to its desired position with three
 parallel rays through the solid collision meshes (center, and 1.2 ball radii to each side). Only an obstacle that
-blocks at least two of them counts, so thin things such as tree trunks do not move the camera. When something is in
-the way, the camera first tries rising over it (up to 0.75 rad higher, at the same distance); only if no raised
-position is clear does it move in front of the obstacle (keeping at least 1.5 ball radii), immediately when getting
-closer so walls are never seen through, and with the usual smoothing when moving back out. Water is not a collision
-mesh, so the water surfaces found by the reflection (their height and extent) are checked too: the camera never goes
-below a water surface, also after Bounce falls in, so the fall keeps its illusion.
+blocks at least two of them counts, so thin things such as tree trunks do not move the camera; when one does, the
+camera moves in front of it (keeping at least 3 ball radii) with a quick but smooth transition.
 
-Some solid meshes are ignored by the camera rays: the invisible boundary walls (collision meshes named `wall*`, such
-as `walls`, `wall_cd` and `wall_cde` in level 1) and the meshes that only exist to fire a trigger (with
-`executetrigger`, such as `watercollision`, which detects falling into the water). They stop or detect the ball, but
-the camera can look in from outside the play area and over the water.
+The ground is not treated as an obstacle: terrain meshes (`ground*`) are left out of those rays, and instead the camera
+stays at least 1.5 ball radii above the ground under it, rising only as much as needed. This keeps it outside the
+island when Bounce is at the shore, and makes it stop smoothly over the ground when pulled down. Also ignored are the
+invisible boundary walls (`wall*`) and the meshes that only exist to fire a trigger (with `executetrigger`, such as
+`watercollision`). Water is not a collision mesh, so the water surfaces found by the reflection (their height and
+extent) are checked too: the camera never goes below a water surface, also after Bounce falls in.
 
 ## Eye animations
 
 The ball model (`resources/models/bounce.hgr`) has its own triggers for the eyes: `T_bounce_lookat_eyes_anim01`
 waits a random time (`random,bounceBlinkDelay,0.05,2`) and plays the eyeball and pupil animations frame range by frame
 range, which is the blink, and `T_bounce_lookat_eyes_anim02` loops the eyebrows. They are added to the level's trigger
-world when the ball loads and started right away; the eye look-at itself is done by the port.
+world when the ball loads and started right away; the eye look-at itself is done by the port. Nodes added to the scene
+after the world was created, such as the ball's, are looked up in the scene when they are not in the world's index.

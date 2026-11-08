@@ -67,7 +67,7 @@ void BallController::buildCollision() {
 		meta.solid = (meta.group & 0x400) == 0;
 		std::string lower = name;
 		for (char& ch : lower) ch = (char)tolower((unsigned char)ch);
-		meta.cameraPassThrough = lower.compare(0, 4, "wall") == 0 || !meta.executeTrigger.empty();
+		meta.cameraPassThrough = lower.compare(0, 4, "wall") == 0 || lower.compare(0, 6, "ground") == 0 || !meta.executeTrigger.empty();
 		const int id = m_world.addMesh(meta);
 		hgr::Mesh* mesh = static_cast<hgr::Mesh*>(n);
 		const math::float3x4 w = n->worldTransform();
@@ -870,10 +870,10 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 	}
 	bool blocked = false;
 	{
-		auto obstruction = [&](const Vec3& to, float& clear) {
-			const Vec3 toCamera = to - target;
-			const float length = toCamera.length();
-			if (length <= r) return false;
+		float clear = 0.f;
+		const Vec3 toCamera = desired - target;
+		const float length = toCamera.length();
+		if (length > r) {
 			const Vec3 dir = toCamera * (1.f / length);
 			Vec3 side(dir.z, 0.f, -dir.x);
 			side = side.length() > 1e-3f ? side * (r * 1.2f / side.length()) : Vec3(r * 1.2f, 0.f, 0.f);
@@ -886,43 +886,28 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 				if (m_world.ray(from, dir, length + r * 0.5f, hit, normal, true, &owner)) {
 					++hits;
 					if (owner >= 0) m_cameraBlocker = m_world.mesh(owner).name;
-					clear = std::min(clear, std::max(r * 1.5f, (hit - from).length() - r * 0.8f));
+					clear = std::min(clear, std::max(r * 3.f, (hit - from).length() - r));
 				}
 			}
-			return hits >= 2 && clear < length;
-		};
-		float clear = 0.f;
-		if (obstruction(desired, clear)) {
-			const Vec3 offset = desired - target;
-			const float distance = offset.length();
-			const float flat = Vec3(offset.x, 0.f, offset.z).length();
-			const float yaw = atan2f(offset.x, offset.z);
-			const float pitch = atan2f(offset.y, std::max(1e-3f, flat));
-			bool raised = false;
-			for (float extra = 0.15f; extra <= 0.75f && !raised; extra += 0.15f) {
-				const float p = std::min(1.35f, pitch + extra);
-				const Vec3 candidate = target + Vec3(sinf(yaw) * cosf(p), sinf(p), cosf(yaw) * cosf(p)) * distance;
-				float c = 0.f;
-				if (!obstruction(candidate, c)) {
-					desired = candidate;
-					raised = true;
-				}
-			}
-			if (!raised) {
-				desired = target + offset * (clear / distance);
+			if (hits >= 2 && clear < length) {
+				desired = target + dir * clear;
 				blocked = true;
-			}
-			static const bool trace = getenv("REDBOUND_TRACE") != 0;
-			if (trace && m_cameraBlocker != m_lastCameraBlocker) {
-				printf("[trace] camera blocked by '%s' (%s)\n", m_cameraBlocker.c_str(), raised ? "rose over it" : "moved in");
-				m_lastCameraBlocker = m_cameraBlocker;
+				static const bool trace = getenv("REDBOUND_TRACE") != 0;
+				if (trace && m_cameraBlocker != m_lastCameraBlocker) {
+					printf("[trace] camera blocked by '%s'\n", m_cameraBlocker.c_str());
+					m_lastCameraBlocker = m_cameraBlocker;
+				}
 			}
 		}
+		float groundY = 0.f;
+		Vec3 groundNormal;
+		const float probeY = std::max(desired.y, target.y) + r * 3.f;
+		if (m_world.rayDown(Vec3(desired.x, probeY, desired.z), probeY - desired.y + r * 20.f, groundY, groundNormal) && desired.y < groundY + r * 1.5f)
+			desired.y = groundY + r * 1.5f;
 	}
 	if (!m_camInit) { m_camPos = desired; m_camLook = target; m_camInit = true; }
-	const float k = 1.f - expf(-dt * (guided || m_modern ? 9.f : 3.f));
-	if (blocked && (desired - target).length() < (m_camPos - target).length()) m_camPos = desired;
-	else m_camPos += (desired - m_camPos) * k;
+	const float k = 1.f - expf(-dt * (blocked ? 14.f : guided || m_modern ? 9.f : 3.f));
+	m_camPos += (desired - m_camPos) * k;
 	float waterHeight = 0.f;
 	if (m_waterQuery && m_waterQuery(m_camPos.x, m_camPos.z, waterHeight) && m_camPos.y < waterHeight + r * 0.6f)
 		m_camPos.y = waterHeight + r * 0.6f;
