@@ -13,11 +13,12 @@ public:
 	void update(hgr::Camera* camera, int width, int height, float time, int clearColor);
 
 	size_t waterCount() const { return m_water.size(); }
+	bool surfaceAt(float x, float z, float& height) const;
 	int normalFrames() const { return (int)m_normals.size(); }
 	bool enabled = true;
 
 private:
-	struct Water { P(hgr::Node) node; float height; };
+	struct Water { P(hgr::Node) node; float height; float bounds[4]; };
 	P(gr::GLES2_Context) m_ctx;
 	P(hgr::Scene) m_scene;
 	std::vector<Water> m_water;

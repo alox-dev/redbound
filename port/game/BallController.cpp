@@ -865,9 +865,26 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 		desired = m_ball.position + back * dist;
 		target = target + Vec3(0.f, (minElevation - std::min(minElevation, m_camPitch)) * dist * 1.5f, 0.f);
 	}
+	bool blocked = false;
+	{
+		const Vec3 toCamera = desired - target;
+		const float length = toCamera.length();
+		Vec3 hit, normal;
+		if (length > r && m_world.ray(target, toCamera * (1.f / length), length + r * 0.5f, hit, normal)) {
+			const float clear = std::max(r * 1.5f, (hit - target).length() - r * 0.8f);
+			if (clear < length) {
+				desired = target + toCamera * (clear / length);
+				blocked = true;
+			}
+		}
+	}
 	if (!m_camInit) { m_camPos = desired; m_camLook = target; m_camInit = true; }
 	const float k = 1.f - expf(-dt * (guided || m_modern ? 9.f : 3.f));
-	m_camPos += (desired - m_camPos) * k;
+	if (blocked && (desired - target).length() < (m_camPos - target).length()) m_camPos = desired;
+	else m_camPos += (desired - m_camPos) * k;
+	float waterHeight = 0.f;
+	if (m_waterQuery && m_waterQuery(m_camPos.x, m_camPos.z, waterHeight) && m_ball.position.y > waterHeight && m_camPos.y < waterHeight + r * 0.6f)
+		m_camPos.y = waterHeight + r * 0.6f;
 	m_camLook += (target - m_camLook) * (1.f - expf(-dt * 8.f));
 	cam->setPosition(math::float3(m_camPos.x, m_camPos.y, m_camPos.z));
 	cam->lookAt(math::float3(m_camLook.x, m_camLook.y, m_camLook.z));

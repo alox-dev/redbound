@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "WaterReflection.h"
 #include <hgr/Mesh.h>
 #include <gr/impl/DIPrimitive.h>
@@ -22,7 +23,7 @@ static bool isWaterMesh(hgr::Node* n) {
 	return false;
 }
 
-static bool surfaceHeight(hgr::Node* n, float& h) {
+static bool surfaceHeight(hgr::Node* n, float& h, float* bounds) {
 	hgr::Mesh* m = static_cast<hgr::Mesh*>(n);
 	const math::float3x4 w = n->worldTransform();
 	double sum = 0;
@@ -35,7 +36,16 @@ static bool surfaceHeight(hgr::Node* n, float& h) {
 		p->getVertexPositions(0, &pos[0], (int)pos.size());
 		p->unlock();
 		for (size_t k = 0; k < pos.size(); ++k) {
-			sum += w.transform(math::float3(pos[k].x, pos[k].y, pos[k].z)).y;
+			const math::float3 v = w.transform(math::float3(pos[k].x, pos[k].y, pos[k].z));
+			sum += v.y;
+			if (!count) {
+				bounds[0] = bounds[1] = v.x;
+				bounds[2] = bounds[3] = v.z;
+			}
+			bounds[0] = std::min(bounds[0], v.x);
+			bounds[1] = std::max(bounds[1], v.x);
+			bounds[2] = std::min(bounds[2], v.z);
+			bounds[3] = std::max(bounds[3], v.z);
 			++count;
 		}
 	}
@@ -49,7 +59,7 @@ WaterReflection::WaterReflection(gr::GLES2_Context* ctx, hgr::Scene* scene) : m_
 		if (!isWaterMesh(n)) continue;
 		Water w;
 		w.node = n;
-		if (surfaceHeight(n, w.height)) m_water.push_back(w);
+		if (surfaceHeight(n, w.height, w.bounds)) m_water.push_back(w);
 	}
 	for (int i = 1; i < 31; ++i) {
 		char name[32];
@@ -62,6 +72,16 @@ WaterReflection::WaterReflection(gr::GLES2_Context* ctx, hgr::Scene* scene) : m_
 	m_mirror = new hgr::Camera;
 	m_mirror->setName("reflejo_agua");
 	m_mirror->linkTo(scene);
+}
+
+bool WaterReflection::surfaceAt(float x, float z, float& height) const {
+	bool found = false;
+	for (const Water& w : m_water)
+		if (x >= w.bounds[0] && x <= w.bounds[1] && z >= w.bounds[2] && z <= w.bounds[3] && (!found || w.height > height)) {
+			height = w.height;
+			found = true;
+		}
+	return found;
 }
 
 void WaterReflection::update(hgr::Camera* camera, int width, int height, float time, int clearColor) {
