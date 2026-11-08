@@ -51,6 +51,7 @@ private:
 	float m_gravity[3] = { 0, 0, 0 };
 	float m_neutral[3] = { 0, 0, 0 };
 	bool m_hasNeutral = false;
+	bool m_gravityReady = false;
 	float m_shakeCooldown = 0.f;
 	bool m_wasControllable = false;
 	bool m_modern = false;
