@@ -428,6 +428,7 @@ void LevelSession::updateWorld(float dt) {
 
 void LevelSession::updatePlayer(float dt) {
 	const PlayerCommand cmd = m_input.update(dt, m_app.width, m_app.height, m_player->controllable());
+	m_player->setGuidedCamera(PlayerInput::touchScheme() == "accelerometer");
 	m_player->setModernInput(cmd.modern, cmd.moveX, cmd.moveY, cmd.cameraYaw, cmd.cameraPitch, cmd.followPath, cmd.autoFollow);
 	m_player->update(dt, cmd.forward, cmd.turn, cmd.jump);
 	m_player->updateChaseCamera(m_camera, dt);

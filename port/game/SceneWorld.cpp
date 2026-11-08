@@ -243,6 +243,13 @@ bool SceneWorld::genericAction(const std::string& name, const std::vector<std::s
 		m_levelComplete = true;
 		return true;
 	}
+	if (name == "setguidingobject" && !args.empty()) {
+		BallRequest r;
+		r.kind = BallRequest::SET_GUIDE;
+		r.name = args[0];
+		m_ballRequests.push_back(r);
+		return true;
+	}
 	if (name == "attachtorail" && args.size() >= 2) {
 		BallRequest r;
 		r.kind = args[0] == "0" ? BallRequest::DETACH_RAIL : BallRequest::ATTACH_RAIL;

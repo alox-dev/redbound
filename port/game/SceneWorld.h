@@ -34,7 +34,7 @@ public:
 	bool hasVariable(const std::string& n) const { return m_vars.count(n) != 0; }
 	bool takeUpdateBallValues() { const bool r = m_updateBall; m_updateBall = false; return r; }
 	struct BallRequest {
-		enum Kind { ATTACH_RAIL, DETACH_RAIL, SPEED_MUL, MAX_SPEED, SET_POS } kind;
+		enum Kind { ATTACH_RAIL, DETACH_RAIL, SPEED_MUL, MAX_SPEED, SET_POS, SET_GUIDE } kind;
 		std::string name;
 		float value = 0.f;
 	};
