@@ -881,9 +881,11 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 			clear = length;
 			for (int i = -1; i <= 1; ++i) {
 				Vec3 hit, normal;
+				int owner = -1;
 				const Vec3 from = target + side * (float)i;
-				if (m_world.ray(from, dir, length + r * 0.5f, hit, normal, true)) {
+				if (m_world.ray(from, dir, length + r * 0.5f, hit, normal, true, &owner)) {
 					++hits;
+					if (owner >= 0) m_cameraBlocker = m_world.mesh(owner).name;
 					clear = std::min(clear, std::max(r * 1.5f, (hit - from).length() - r * 0.8f));
 				}
 			}
@@ -909,6 +911,11 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 			if (!raised) {
 				desired = target + offset * (clear / distance);
 				blocked = true;
+			}
+			static const bool trace = getenv("REDBOUND_TRACE") != 0;
+			if (trace && m_cameraBlocker != m_lastCameraBlocker) {
+				printf("[trace] camera blocked by '%s' (%s)\n", m_cameraBlocker.c_str(), raised ? "rose over it" : "moved in");
+				m_lastCameraBlocker = m_cameraBlocker;
 			}
 		}
 	}
