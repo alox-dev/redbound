@@ -117,21 +117,27 @@ void PlayerInput::readTilt(float dt, float& tiltX, float& tiltY) {
 	Devices& devices = Devices::instance();
 	float a[3];
 	if (!devices.accelerometer() || SDL_SensorGetData(devices.accelerometer(), a, 3) != 0) return;
+	if (!m_gravityReady) {
+		for (int c = 0; c < 3; ++c) m_gravity[c] = a[c];
+		m_gravityReady = true;
+	}
 	for (int c = 0; c < 3; ++c) m_gravity[c] = m_gravity[c] * 0.85f + a[c] * 0.15f;
+	const float length = std::sqrt(m_gravity[0] * m_gravity[0] + m_gravity[1] * m_gravity[1] + m_gravity[2] * m_gravity[2]);
+	if (length < 5.f) return;
+	float n[3];
+	for (int c = 0; c < 3; ++c) n[c] = m_gravity[c] / length;
 	if (!m_hasNeutral || devices.recalibrationRequested()) {
-		if (m_gravity[0] * m_gravity[0] + m_gravity[1] * m_gravity[1] + m_gravity[2] * m_gravity[2] > 25.f) {
-			for (int c = 0; c < 3; ++c) m_neutral[c] = m_gravity[c];
-			m_hasNeutral = true;
-			devices.clearRecalibration();
-		}
+		for (int c = 0; c < 3; ++c) m_neutral[c] = n[c];
+		m_hasNeutral = true;
+		devices.clearRecalibration();
 	}
 	const float sign = SDL_GetDisplayOrientation(0) == SDL_ORIENTATION_LANDSCAPE_FLIPPED ? -1.f : 1.f;
 	auto right = [&](const float* v) { return -sign * v[1]; };
 	auto up = [&](const float* v) { return sign * v[0]; };
 	Config& cfg = Config::get();
-	const float g = 9.81f, sensitivity = cfg.num("controls.tilt_sensitivity", 1.f) / 0.34f;
-	float tx = -(right(m_gravity) - right(m_neutral)) / g * sensitivity;
-	float ty = -(up(m_gravity) - up(m_neutral)) / g * sensitivity;
+	const float sensitivity = cfg.num("controls.tilt_sensitivity", 1.f) / 0.34f;
+	float tx = -(right(n) - right(m_neutral)) * sensitivity;
+	float ty = -(up(n) - up(m_neutral)) * sensitivity;
 	if (cfg.flag("controls.tilt_invert_x", false)) tx = -tx;
 	if (cfg.flag("controls.tilt_invert_y", false)) ty = -ty;
 	tx = clampUnit(tx);
@@ -139,10 +145,10 @@ void PlayerInput::readTilt(float dt, float& tiltX, float& tiltY) {
 	if (std::fabs(tx) > 0.14f) tiltX = (tx - (tx > 0.f ? 0.14f : -0.14f)) / 0.86f;
 	if (std::fabs(ty) > 0.08f) tiltY = (ty - (ty > 0.f ? 0.08f : -0.08f)) / 0.92f;
 	m_shakeCooldown = std::max(0.f, m_shakeCooldown - dt);
-	const float magnitude = std::sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
-	if (m_shakeCooldown <= 0.f && std::fabs(magnitude - g) > 7.f) {
+	const float jx = a[0] - m_gravity[0], jy = a[1] - m_gravity[1], jz = a[2] - m_gravity[2];
+	if (m_shakeCooldown <= 0.f && std::sqrt(jx * jx + jy * jy + jz * jz) > 12.f) {
 		m_jumpFrames = 6;
-		m_shakeCooldown = 0.5f;
+		m_shakeCooldown = 0.7f;
 	}
 }
 

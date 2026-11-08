@@ -867,13 +867,44 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 	}
 	bool blocked = false;
 	{
-		const Vec3 toCamera = desired - target;
-		const float length = toCamera.length();
-		Vec3 hit, normal;
-		if (length > r && m_world.ray(target, toCamera * (1.f / length), length + r * 0.5f, hit, normal)) {
-			const float clear = std::max(r * 1.5f, (hit - target).length() - r * 0.8f);
-			if (clear < length) {
-				desired = target + toCamera * (clear / length);
+		auto obstruction = [&](const Vec3& to, float& clear) {
+			const Vec3 toCamera = to - target;
+			const float length = toCamera.length();
+			if (length <= r) return false;
+			const Vec3 dir = toCamera * (1.f / length);
+			Vec3 side(dir.z, 0.f, -dir.x);
+			side = side.length() > 1e-3f ? side * (r * 1.2f / side.length()) : Vec3(r * 1.2f, 0.f, 0.f);
+			int hits = 0;
+			clear = length;
+			for (int i = -1; i <= 1; ++i) {
+				Vec3 hit, normal;
+				const Vec3 from = target + side * (float)i;
+				if (m_world.ray(from, dir, length + r * 0.5f, hit, normal)) {
+					++hits;
+					clear = std::min(clear, std::max(r * 1.5f, (hit - from).length() - r * 0.8f));
+				}
+			}
+			return hits >= 2 && clear < length;
+		};
+		float clear = 0.f;
+		if (obstruction(desired, clear)) {
+			const Vec3 offset = desired - target;
+			const float distance = offset.length();
+			const float flat = Vec3(offset.x, 0.f, offset.z).length();
+			const float yaw = atan2f(offset.x, offset.z);
+			const float pitch = atan2f(offset.y, std::max(1e-3f, flat));
+			bool raised = false;
+			for (float extra = 0.15f; extra <= 0.75f && !raised; extra += 0.15f) {
+				const float p = std::min(1.35f, pitch + extra);
+				const Vec3 candidate = target + Vec3(sinf(yaw) * cosf(p), sinf(p), cosf(yaw) * cosf(p)) * distance;
+				float c = 0.f;
+				if (!obstruction(candidate, c)) {
+					desired = candidate;
+					raised = true;
+				}
+			}
+			if (!raised) {
+				desired = target + offset * (clear / distance);
 				blocked = true;
 			}
 		}
@@ -883,7 +914,7 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 	if (blocked && (desired - target).length() < (m_camPos - target).length()) m_camPos = desired;
 	else m_camPos += (desired - m_camPos) * k;
 	float waterHeight = 0.f;
-	if (m_waterQuery && m_waterQuery(m_camPos.x, m_camPos.z, waterHeight) && m_ball.position.y > waterHeight && m_camPos.y < waterHeight + r * 0.6f)
+	if (m_waterQuery && m_waterQuery(m_camPos.x, m_camPos.z, waterHeight) && m_camPos.y < waterHeight + r * 0.6f)
 		m_camPos.y = waterHeight + r * 0.6f;
 	m_camLook += (target - m_camLook) * (1.f - expf(-dt * 8.f));
 	cam->setPosition(math::float3(m_camPos.x, m_camPos.y, m_camPos.z));

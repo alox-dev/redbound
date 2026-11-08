@@ -83,9 +83,11 @@ The other schemes keep the player controlled camera.
 
 ## Camera collisions
 
-Every chase camera (player controlled or guided) traces a ray from Bounce to its desired position through the solid
-collision meshes; when something is in the way the camera moves in front of it (keeping at least 1.5 ball radii),
-immediately when getting closer so walls are never seen through, and with the usual smoothing when moving back out.
-Water is not a collision mesh, so the water surfaces found by the reflection (their height and extent) are checked
-too: while Bounce is above the water, the camera never goes below its surface. When Bounce falls in, the limit is
-lifted so the sinking plays as in the original.
+Every chase camera (player controlled or guided) checks the line from Bounce to its desired position with three
+parallel rays through the solid collision meshes (center, and 1.2 ball radii to each side). Only an obstacle that
+blocks at least two of them counts, so thin things such as tree trunks do not move the camera. When something is in
+the way, the camera first tries rising over it (up to 0.75 rad higher, at the same distance); only if no raised
+position is clear does it move in front of the obstacle (keeping at least 1.5 ball radii), immediately when getting
+closer so walls are never seen through, and with the usual smoothing when moving back out. Water is not a collision
+mesh, so the water surfaces found by the reflection (their height and extent) are checked too: the camera never goes
+below a water surface, also after Bounce falls in, so the fall keeps its illusion.

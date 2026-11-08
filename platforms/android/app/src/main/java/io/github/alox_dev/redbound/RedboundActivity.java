@@ -2,6 +2,7 @@ package io.github.alox_dev.redbound;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
@@ -95,5 +96,16 @@ public class RedboundActivity extends SDLActivity {
         } catch (Exception e) {
             return "";
         }
+    }
+
+    public static void setOrientationLocked(final boolean locked) {
+        final Activity activity = mSingleton;
+        if (activity == null) return;
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                activity.setRequestedOrientation(locked ? ActivityInfo.SCREEN_ORIENTATION_LOCKED : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+            }
+        });
     }
 }

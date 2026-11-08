@@ -57,6 +57,16 @@ std::string androidExternalDir() {
 	return p ? p : "";
 }
 
+void androidSetOrientationLocked(bool locked) {
+	JNIEnv* env = (JNIEnv*)SDL_AndroidGetJNIEnv();
+	jclass c = env ? activityClass(env) : 0;
+	if (!c) return;
+	jmethodID m = env->GetStaticMethodID(c, "setOrientationLocked", "(Z)V");
+	if (m) env->CallStaticVoidMethod(c, m, (jboolean)locked);
+	if (env->ExceptionCheck()) env->ExceptionClear();
+	env->DeleteLocalRef(c);
+}
+
 std::string androidResolveUrl(const std::string& url) {
 	JNIEnv* env = (JNIEnv*)SDL_AndroidGetJNIEnv();
 	jclass c = env ? activityClass(env) : 0;
@@ -87,5 +97,6 @@ bool androidPicking() { return false; }
 std::string androidTakePicked() { return ""; }
 std::string androidExternalDir() { return ""; }
 std::string androidResolveUrl(const std::string&) { return ""; }
+void androidSetOrientationLocked(bool) {}
 }
 #endif
