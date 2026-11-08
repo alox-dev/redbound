@@ -36,6 +36,8 @@
 namespace redbound {
 static bool mergeIconFont(const char* relative, const ImWchar* ranges, float size);
 static std::string format(const char* fmt, ...);
+static std::string g_pressedSlider, g_restoreSlider;
+static float g_pressedValue = 0.f;
 }
 
 namespace redbound {
@@ -331,7 +333,10 @@ void Overlay::dragScroll() {
 	}
 	if (m_scrollCandidate && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
 		const ImVec2 total = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0.f);
-		if (!m_scrollDragging && std::fabs(total.y) > 10.f * m_scale && std::fabs(total.y) > std::fabs(total.x)) m_scrollDragging = true;
+		if (!m_scrollDragging && std::fabs(total.y) > 10.f * m_scale && std::fabs(total.y) > std::fabs(total.x)) {
+			m_scrollDragging = true;
+			if (!g_pressedSlider.empty()) g_restoreSlider = g_pressedSlider;
+		}
 		if (m_scrollDragging) {
 			ImGui::SetScrollY(ImGui::GetScrollY() - io.MouseDelta.y);
 			if (io.DeltaTime > 0.f) m_scrollVelocity = m_scrollVelocity * 0.6f + (-io.MouseDelta.y / io.DeltaTime) * 0.4f;
@@ -339,6 +344,7 @@ void Overlay::dragScroll() {
 		}
 	}
 	if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+		g_pressedSlider.clear();
 		if (!m_scrollDragging) m_scrollVelocity = 0.f;
 		m_scrollCandidate = m_scrollDragging = false;
 	}
@@ -454,10 +460,26 @@ static bool checkRow(const char* label, const char* key, bool fallback) {
 
 static bool sliderRow(const char* label, const char* key, float fallback, float lo, float hi, const char* fmt) {
 	Config& c = Config::get();
-	float v = c.num(key, fallback);
+	if (g_restoreSlider == key) {
+		g_restoreSlider.clear();
+		c.setNum(key, g_pressedValue);
+		c.save();
+		row(label);
+		float v = g_pressedValue;
+		ImGui::PushID(key);
+		ImGui::SliderFloat("##v", &v, lo, hi, fmt);
+		ImGui::PopID();
+		return true;
+	}
+	const float before = c.num(key, fallback);
+	float v = before;
 	row(label);
 	ImGui::PushID(key);
 	const bool changed = ImGui::SliderFloat("##v", &v, lo, hi, fmt);
+	if (ImGui::IsItemActivated()) {
+		g_pressedSlider = key;
+		g_pressedValue = before;
+	}
 	ImGui::PopID();
 	if (changed) {
 		c.setNum(key, v);
@@ -817,9 +839,20 @@ void Overlay::drawGraphics() {
 	}
 	section(tr("graphics.section_performance"));
 	if (beginRows("performance")) {
-		int percent = (int)(c.num("graphics.render_scale", 1.f) * 100.f + 0.5f);
+		if (g_restoreSlider == "graphics.render_scale") {
+			g_restoreSlider.clear();
+			c.setNum("graphics.render_scale", g_pressedValue);
+			c.save();
+		}
+		const float scaleBefore = c.num("graphics.render_scale", 1.f);
+		int percent = (int)(scaleBefore * 100.f + 0.5f);
 		row(tr("graphics.render_scale"));
-		if (ImGui::SliderInt("##render_scale", &percent, 50, 100, "%d%%")) {
+		const bool scaleChanged = ImGui::SliderInt("##render_scale", &percent, 50, 100, "%d%%");
+		if (ImGui::IsItemActivated()) {
+			g_pressedSlider = "graphics.render_scale";
+			g_pressedValue = scaleBefore;
+		}
+		if (scaleChanged) {
 			c.setNum("graphics.render_scale", percent / 100.f);
 			c.save();
 		}

@@ -91,3 +91,10 @@ position is clear does it move in front of the obstacle (keeping at least 1.5 ba
 closer so walls are never seen through, and with the usual smoothing when moving back out. Water is not a collision
 mesh, so the water surfaces found by the reflection (their height and extent) are checked too: the camera never goes
 below a water surface, also after Bounce falls in, so the fall keeps its illusion.
+
+## Eye animations
+
+The ball model (`resources/models/bounce.hgr`) has its own triggers for the eyes: `T_bounce_lookat_eyes_anim01`
+waits a random time (`random,bounceBlinkDelay,0.05,2`) and plays the eyeball and pupil animations frame range by frame
+range, which is the blink, and `T_bounce_lookat_eyes_anim02` loops the eyebrows. They are added to the level's trigger
+world when the ball loads and started right away; the eye look-at itself is done by the port.
