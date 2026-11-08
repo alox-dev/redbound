@@ -91,8 +91,11 @@ on) never pulls the camera in, so when the camera is below Bounce it keeps its d
 games. When an obstacle does count, the camera moves in front of it (keeping at least 3 ball radii) with a quick but
 smooth transition.
 
-The ground is not treated as an obstacle: terrain meshes (`ground*`) are left out of those rays, and instead the camera
-stays at least 1.5 ball radii above the ground under it, rising only as much as needed. This keeps it outside the
+The player controlled camera orbits freely, also below Bounce (down to 0.6 rad under the horizon) to look up; as it
+goes below 0.15 rad it moves in smoothly, up to 60 % closer, as in modern open world games. The ground is not treated
+as an obstacle: terrain meshes (`ground*`) are left out of those rays, and when the ground under the desired position
+is too close, the camera slides toward Bounce along its line of sight until it is clear (hugging the terrain), and
+only rises if no point of that line is clear. This keeps it outside the
 island when Bounce is at the shore, and makes it stop smoothly over the ground when pulled down. Also ignored are the
 invisible boundary walls (`wall*`) and the meshes that only exist to fire a trigger (with `executetrigger`, such as
 `watercollision`). Water is not a collision mesh, so the water surfaces found by the reflection (their height and
