@@ -550,10 +550,7 @@ void LevelSession::render(float realDt, bool paused, bool liveBlur) {
 		m_sceneTarget.end(w, h);
 		m_ctx->setViewport(gr::Rect(0, 0, w, h));
 	}
-	if (m_followGameCamera) {
-		const bool attractionDemo = !m_player && m_world->getVariable("attraction") == 1.f;
-		m_fade.draw(m_world->fadeAmount(), attractionDemo || m_world->fadeColor() != 0);
-	}
+	if (m_followGameCamera) m_fade.draw(m_world->fadeAmount(), m_world->fadeColor() == 0);
 	if (m_hasUi) {
 		Ui& ui = *m_ui;
 		if (m_needCapture) {
