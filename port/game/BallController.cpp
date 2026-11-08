@@ -883,7 +883,7 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 				Vec3 hit, normal;
 				int owner = -1;
 				const Vec3 from = target + side * (float)i;
-				if (m_world.ray(from, dir, length + r * 0.5f, hit, normal, true, &owner)) {
+				if (m_world.ray(from, dir, length + r * 0.5f, hit, normal, true, &owner) && std::fabs(normal.y) < 0.6f) {
 					++hits;
 					if (owner >= 0) m_cameraBlocker = m_world.mesh(owner).name;
 					clear = std::min(clear, std::max(r * 3.f, (hit - from).length() - r));

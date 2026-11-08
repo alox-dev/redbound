@@ -48,7 +48,8 @@ redirect to `/releases/tag/vX.Y.Z`, which always points to the latest regular re
 skipped) and is not subject to the GitHub API rate limit. Versions are compared numerically (`1.10.0` is newer than
 `1.9.0`). No data about the player or the device is sent beyond a normal web request. When a newer version exists, a
 notice appears and the Updates section offers a Download button that opens the release page. Windows uses WinHTTP,
-Linux `curl` (or `wget`), and Android the platform's HTTP client, which needs the `INTERNET` permission.
+Linux `curl` (or `wget`, with a single try), read without stdio locks so a slow network never delays closing the game,
+and Android the platform's HTTP client, which needs the `INTERNET` permission.
 
 ## Icons
 

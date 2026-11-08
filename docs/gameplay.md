@@ -85,8 +85,11 @@ The other schemes keep the player controlled camera.
 
 Every chase camera (player controlled or guided) checks the line from Bounce to its desired position with three
 parallel rays through the solid collision meshes (center, and 1.2 ball radii to each side). Only an obstacle that
-blocks at least two of them counts, so thin things such as tree trunks do not move the camera; when one does, the
-camera moves in front of it (keeping at least 3 ball radii) with a quick but smooth transition.
+blocks at least two of them counts, so thin things such as tree trunks do not move the camera. Only steep surfaces
+(walls, the sides of rocks and buildings) count: a surface facing up or down (ground, slopes, a ledge Bounce stands
+on) never pulls the camera in, so when the camera is below Bounce it keeps its distance, as in modern third person
+games. When an obstacle does count, the camera moves in front of it (keeping at least 3 ball radii) with a quick but
+smooth transition.
 
 The ground is not treated as an obstacle: terrain meshes (`ground*`) are left out of those rays, and instead the camera
 stays at least 1.5 ball radii above the ground under it, rising only as much as needed. This keeps it outside the
@@ -102,3 +105,5 @@ waits a random time (`random,bounceBlinkDelay,0.05,2`) and plays the eyeball and
 range, which is the blink, and `T_bounce_lookat_eyes_anim02` loops the eyebrows. They are added to the level's trigger
 world when the ball loads and started right away; the eye look-at itself is done by the port. Nodes added to the scene
 after the world was created, such as the ball's, are looked up in the scene when they are not in the world's index.
+Animations that come from the ball model blend from the node's current pose over 0.12 s, so the randomly chosen
+pupil animations never snap; level animations, such as cutscene cameras, still start exactly on their first frame.
