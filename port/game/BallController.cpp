@@ -645,7 +645,7 @@ void BallController::update(float dt, float forward, float turn, bool jump) {
 	}
 	if (m_modern) {
 		m_camYaw += m_dCamYaw;
-		m_camPitch = std::max(-0.35f, std::min(1.2f, m_camPitch + m_dCamPitch));
+		m_camPitch = std::max(-0.6f, std::min(1.2f, m_camPitch + m_dCamPitch));
 		if (m_followPath && !m_cinematic && m_rail < 0) {
 			const Vec3 hv(m_ball.velocity.x, 0.f, m_ball.velocity.z);
 			const float sp = hv.length();
@@ -861,12 +861,16 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 		const Vec3 back(-sinf(m_camYaw) * cosf(m_camPitch), sinf(m_camPitch), -cosf(m_camYaw) * cosf(m_camPitch));
 		desired = m_ball.position + back * dist;
 	} else if (m_modern) {
-		const float dist = r * 14.4f;
-		const float minElevation = 0.12f;
-		const float elevation = std::max(minElevation, m_camPitch);
-		const Vec3 back(-sinf(m_camYaw) * cosf(elevation), sinf(elevation), -cosf(m_camYaw) * cosf(elevation));
+		const float low = 0.15f;
+		float dist = r * 14.4f;
+		if (m_camPitch < low) {
+			float t = std::min(1.f, (low - m_camPitch) / 0.75f);
+			t = t * t * (3.f - 2.f * t);
+			dist *= 1.f - 0.6f * t;
+		}
+		const Vec3 back(-sinf(m_camYaw) * cosf(m_camPitch), sinf(m_camPitch), -cosf(m_camYaw) * cosf(m_camPitch));
 		desired = m_ball.position + back * dist;
-		target = target + Vec3(0.f, (minElevation - std::min(minElevation, m_camPitch)) * dist * 1.5f, 0.f);
+		target = target + Vec3(0.f, (low - std::min(low, m_camPitch)) * r * 2.f, 0.f);
 	}
 	bool blocked = false;
 	{
@@ -899,11 +903,24 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 				}
 			}
 		}
+		auto groundBelow = [&](const Vec3& p, float& y) {
+			Vec3 n;
+			const float probeY = std::max(p.y, target.y) + r * 3.f;
+			return m_world.rayDown(Vec3(p.x, probeY, p.z), probeY - p.y + r * 20.f, y, n);
+		};
 		float groundY = 0.f;
-		Vec3 groundNormal;
-		const float probeY = std::max(desired.y, target.y) + r * 3.f;
-		if (m_world.rayDown(Vec3(desired.x, probeY, desired.z), probeY - desired.y + r * 20.f, groundY, groundNormal) && desired.y < groundY + r * 1.5f)
-			desired.y = groundY + r * 1.5f;
+		if (groundBelow(desired, groundY) && desired.y < groundY + r * 0.8f) {
+			bool slid = false;
+			for (float t = 0.95f; t >= 0.35f && !slid; t -= 0.05f) {
+				const Vec3 p = target + (desired - target) * t;
+				float y = 0.f;
+				if (!groundBelow(p, y) || p.y >= y + r * 0.8f) {
+					desired = p;
+					slid = true;
+				}
+			}
+			if (!slid) desired.y = groundY + r * 0.8f;
+		}
 	}
 	if (!m_camInit) { m_camPos = desired; m_camLook = target; m_camInit = true; }
 	const float k = 1.f - expf(-dt * (blocked ? 14.f : guided || m_modern ? 9.f : 3.f));

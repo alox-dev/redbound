@@ -117,12 +117,16 @@ bool Overlay::init(SDL_Window* win, SDL_GLContext ctx) {
 	int dw, dh;
 	SDL_GL_GetDrawableSize(win, &dw, &dh);
 	const float pxPerMm = ddpi / 25.4f * (w > 0 ? (float)dw / w : 1.f);
-	float fontPx = std::max(3.4f * pxPerMm, 22.f * (dh > 0 ? dh / 720.f : 1.f) * 0.8f);
-	m_scale = fontPx / 22.f;
-	const bool touch = SDL_GetNumTouchDevices() > 0;
+#if defined(__ANDROID__) || defined(__SWITCH__) || defined(__vita__)
+	const bool touch = true;
+#else
+	const bool touch = false;
+#endif
+	const float heightScale = dh > 0 ? dh / 720.f : 1.f;
+	float fontPx = touch ? std::max(2.9f * pxPerMm, 16.f * heightScale) : std::max(3.8f * pxPerMm, 22.f * heightScale * 0.85f);
 	const float diagonalIn = std::sqrt((float)dw * dw + (float)dh * dh) / (pxPerMm * 25.4f);
-	m_compact = touch || diagonalIn < 9.f || getenv("REDBOUND_MENU_COMPACT");
-	if (m_compact) fontPx = std::max(fontPx, 18.f);
+	m_compact = touch || diagonalIn < 9.f || dh < 600 || getenv("REDBOUND_MENU_COMPACT");
+	if (m_compact) fontPx = std::max(fontPx, 16.f);
 	m_scale = fontPx / 22.f;
 	const std::string font = findFont();
 	if (!font.empty()) io.Fonts->AddFontFromFileTTF(font.c_str(), fontPx, 0, io.Fonts->GetGlyphRangesDefault());

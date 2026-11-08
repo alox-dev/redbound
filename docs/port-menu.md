@@ -117,3 +117,9 @@ To add a language:
 
 Languages can also be tested without rebuilding by placing the file in `~/.config/redbound/lang/` together with a
 `languages` file. The current font covers Latin scripts.
+
+## Size
+
+On touch devices (Android, and later Switch and Vita) the menu is compact, with text about 2.9 mm tall so more
+options fit. On desktop the text is larger (about 3.8 mm, or 22 px per 720 px of height scaled by 0.85, whichever is
+bigger), and the compact layout is used only for small windows (under 600 px high or 9 inches diagonal).

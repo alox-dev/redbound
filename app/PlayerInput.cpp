@@ -225,11 +225,19 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 	if (m_move.active) {
 		touchActive = true;
 		if (m_move.swiping || scheme == "modern") {
-			const float radius = height * 0.08f;
-			touchX = clampUnit((m_move.x - m_move.startX) * width / radius);
-			touchY = clampUnit(-(m_move.y - m_move.startY) * height / radius);
-			if (std::fabs(touchX) < 0.12f) touchX = 0.f;
-			if (std::fabs(touchY) < 0.12f) touchY = 0.f;
+			const float radius = height * (scheme == "modern" ? 0.14f : 0.08f);
+			touchX = (m_move.x - m_move.startX) * width / radius;
+			touchY = -(m_move.y - m_move.startY) * height / radius;
+			const float magnitude = std::sqrt(touchX * touchX + touchY * touchY);
+			const float deadzone = scheme == "modern" ? 0.08f : 0.12f;
+			if (magnitude < deadzone) {
+				touchX = touchY = 0.f;
+			} else {
+				float response = std::min(1.f, (magnitude - deadzone) / (1.f - deadzone));
+				if (scheme == "modern") response = std::pow(response, 1.6f);
+				touchX *= response / magnitude;
+				touchY *= response / magnitude;
+			}
 		} else if (scheme == "classic" && SDL_GetTicks() - m_move.restTime > 200) {
 			holdTarget = m_move.restX > 0.5f ? 1.f : -1.f;
 			m_lastLookTime = SDL_GetTicks();
@@ -244,8 +252,8 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 	m_lookPendingY -= lookY;
 	const float lookSensitivity = cfg.num("controls.camera_sensitivity", 1.f);
 	const float aspect = height > 0 ? (float)width / (float)height : 1.f;
-	const float lookYaw = (lookX * 3.14159265f + m_holdYawSpeed * dt) * lookSensitivity;
-	const float lookPitch = lookY * 1.6f / std::max(1.f, aspect * 0.5f) * lookSensitivity * (cfg.flag("controls.invert_y", false) ? -1.f : 1.f);
+	const float lookYaw = (lookX * 3.14159265f * 0.65f + m_holdYawSpeed * dt) * lookSensitivity;
+	const float lookPitch = lookY * 1.1f / std::max(1.f, aspect * 0.5f) * lookSensitivity * (cfg.flag("controls.invert_y", false) ? -1.f : 1.f);
 	if (m_flickTime > 0.f) {
 		m_flickTime -= dt;
 		touchX = m_flickX;
