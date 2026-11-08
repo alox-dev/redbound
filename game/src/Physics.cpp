@@ -101,7 +101,7 @@ bool CollisionWorld::rayDown(const Vec3& from, float maxDist, float& hitY, Vec3&
 	return hit;
 }
 
-bool CollisionWorld::ray(const Vec3& from, const Vec3& dir, float maxDist, Vec3& hit, Vec3& normal) const {
+bool CollisionWorld::ray(const Vec3& from, const Vec3& dir, float maxDist, Vec3& hit, Vec3& normal, bool forCamera) const {
 	if (!std::isfinite(from.x) || !std::isfinite(from.y) || !std::isfinite(from.z) || !(maxDist > 0.f) || maxDist > m_cell * 10000.f) return false;
 	float best = maxDist;
 	bool found = false;
@@ -119,7 +119,7 @@ bool CollisionWorld::ray(const Vec3& from, const Vec3& dir, float maxDist, Vec3&
 						if (std::find(seen.begin(), seen.end(), ti) != seen.end()) continue;
 						seen.push_back(ti);
 						const CollisionTriangle& t = m_tris[ti];
-						if (t.owner >= 0 && t.owner < (int)m_meshes.size() && !m_meshes[t.owner].solid) continue;
+						if (t.owner >= 0 && t.owner < (int)m_meshes.size() && (!m_meshes[t.owner].solid || (forCamera && m_meshes[t.owner].cameraPassThrough))) continue;
 						const Vec3 e1 = t.b - t.a, e2 = t.c - t.a, pv = dir.cross(e2);
 						const float det = e1.dot(pv);
 						if (std::fabs(det) < 1e-8f) continue;

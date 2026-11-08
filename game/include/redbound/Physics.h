@@ -31,6 +31,7 @@ struct CollisionMesh {
 	int group = 0;
 	std::string executeTrigger;
 	bool solid = true;
+	bool cameraPassThrough = false;
 };
 
 struct Contact {
@@ -53,7 +54,7 @@ public:
 
 	bool rayDown(const Vec3& from, float maxDist, float& hitY) const;
 	bool rayDown(const Vec3& from, float maxDist, float& hitY, Vec3& normal) const;
-	bool ray(const Vec3& from, const Vec3& dir, float maxDist, Vec3& hit, Vec3& normal) const;
+	bool ray(const Vec3& from, const Vec3& dir, float maxDist, Vec3& hit, Vec3& normal, bool forCamera = false) const;
 
 private:
 	float m_cell;

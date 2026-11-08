@@ -179,6 +179,76 @@ void Overlay::shutdown() {
 	m_ready = false;
 }
 
+bool Overlay::handleTouchSlop(const SDL_Event& e) {
+	const bool down = e.type == SDL_MOUSEBUTTONDOWN && e.button.which == SDL_TOUCH_MOUSEID && e.button.button == SDL_BUTTON_LEFT;
+	const bool up = e.type == SDL_MOUSEBUTTONUP && e.button.which == SDL_TOUCH_MOUSEID && e.button.button == SDL_BUTTON_LEFT;
+	const bool motion = e.type == SDL_MOUSEMOTION && e.motion.which == SDL_TOUCH_MOUSEID;
+	if (!down && !up && !motion) return false;
+	auto forward = [&](const SDL_Event& event) {
+		SDL_Event copy = event;
+		ImGui_ImplSDL2_ProcessEvent(&copy);
+	};
+	auto moveTo = [&](int x, int y) {
+		SDL_Event m;
+		memset(&m, 0, sizeof(m));
+		m.type = SDL_MOUSEMOTION;
+		m.motion.windowID = e.button.windowID;
+		m.motion.which = SDL_TOUCH_MOUSEID;
+		m.motion.x = x;
+		m.motion.y = y;
+		forward(m);
+	};
+	if (down) {
+		m_touchState = TouchState::Pending;
+		m_heldDown = e;
+		m_touchStartX = m_touchLastX = e.button.x;
+		m_touchStartY = m_touchLastY = e.button.y;
+		m_touchLastTime = e.button.timestamp;
+		m_scrollVelocity = 0.f;
+		moveTo(e.button.x, e.button.y);
+		return true;
+	}
+	if (motion) {
+		const int x = e.motion.x, y = e.motion.y;
+		if (m_touchState == TouchState::Pending) {
+			const float slop = 10.f * m_scale;
+			const float dx = (float)(x - m_touchStartX), dy = (float)(y - m_touchStartY);
+			if (std::fabs(dy) > slop && std::fabs(dy) >= std::fabs(dx)) {
+				m_touchState = TouchState::Scrolling;
+			} else if (std::fabs(dx) > slop) {
+				m_touchState = TouchState::Passthrough;
+				forward(m_heldDown);
+				return false;
+			} else {
+				return true;
+			}
+		}
+		if (m_touchState == TouchState::Scrolling) {
+			const float delta = (float)(m_touchLastY - y);
+			m_pendingScroll += delta;
+			const Uint32 elapsed = e.motion.timestamp - m_touchLastTime;
+			if (elapsed > 0) m_scrollVelocity = m_scrollVelocity * 0.5f + delta / (elapsed / 1000.f) * 0.5f;
+			m_touchLastX = x;
+			m_touchLastY = y;
+			m_touchLastTime = e.motion.timestamp;
+			return true;
+		}
+		return false;
+	}
+	if (m_touchState == TouchState::Pending) {
+		forward(m_heldDown);
+		m_touchState = TouchState::Idle;
+		return false;
+	}
+	if (m_touchState == TouchState::Scrolling) {
+		if (e.button.timestamp - m_touchLastTime > 120) m_scrollVelocity = 0.f;
+		m_touchState = TouchState::Idle;
+		return true;
+	}
+	m_touchState = TouchState::Idle;
+	return false;
+}
+
 bool Overlay::processEvent(const SDL_Event& e) {
 	if (!m_ready) return false;
 	bool toggle = false;
@@ -200,6 +270,7 @@ bool Overlay::processEvent(const SDL_Event& e) {
 	}
 #endif
 	if (!m_open) return false;
+	if (handleTouchSlop(e)) return true;
 	ImGui_ImplSDL2_ProcessEvent(&e);
 	switch (e.type) {
 	case SDL_QUIT: case SDL_WINDOWEVENT: return false;
@@ -324,6 +395,10 @@ void Overlay::draw() {
 }
 
 void Overlay::dragScroll() {
+	if (m_pendingScroll != 0.f) {
+		ImGui::SetScrollY(ImGui::GetScrollY() + m_pendingScroll);
+		m_pendingScroll = 0.f;
+	}
 	const ImGuiIO& io = ImGui::GetIO();
 	const bool hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
 	if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {

@@ -361,7 +361,8 @@ ActionRegistry::ActionRegistry() {
 	});
 	add("playanimation", [](const ActionArgs& a) {
 		const float fps = 1.f / 30.f;
-		return std::unique_ptr<Action>(new PlayAnimation(arg(a, 0), arg(a, 1), argf(a, 3) * fps,
+		const std::string anim = a.args.size() > 2 && !arg(a, 2).empty() ? arg(a, 2) : arg(a, 1);
+		return std::unique_ptr<Action>(new PlayAnimation(arg(a, 0), anim, argf(a, 3) * fps,
 			a.args.size() > 4 ? argf(a, 4) * fps : -1.f, false));
 	});
 	add("moveuv", [](const ActionArgs& a) {

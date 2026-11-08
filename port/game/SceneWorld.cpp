@@ -117,10 +117,14 @@ void SceneWorld::unlink(const std::vector<std::string>& nodes) {
 
 int SceneWorld::playAnimation(const std::string& nodeName, const std::string& anim, float start, float end, bool loop) {
 	hgr::Node* n = node(nodeName);
-	hgr::TransformAnimationSet* set = m_scene->transformAnimations();
-	if (!n || !set) return -1;
-	P(hgr::TransformAnimation)* a = set->containsKey(anim.c_str()) ? &set->get(anim.c_str()) : 0;
-	if (!a || !*a) return -1;
+	if (!n) return -1;
+	std::vector<hgr::TransformAnimationSet*> sets(1, m_scene->transformAnimations());
+	sets.insert(sets.end(), m_animationSets.begin(), m_animationSets.end());
+	P(hgr::TransformAnimation)* a = 0;
+	for (const std::string& name : { anim, nodeName })
+		for (hgr::TransformAnimationSet* set : sets)
+			if (!a && set && set->containsKey(name.c_str()) && set->get(name.c_str())) a = &set->get(name.c_str());
+	if (!a) return -1;
 	Playing p;
 	p.node = n;
 	p.anim = *a;

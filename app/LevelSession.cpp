@@ -195,6 +195,8 @@ void LevelSession::setupPlayer() {
 				m_player->setFormInfo(v.substr(0, v.find_first_of("\r\n")));
 			}
 		}
+	m_ballScene = ballScene;
+	m_world->addAnimationSet(ballScene->transformAnimations());
 	if (hgr::UserPropertySet* props = ballScene->userProperties()) {
 		int eyeTriggers = 0;
 		for (const char* name : { "T_bounce_lookat_eyes_anim01", "T_bounce_lookat_eyes_anim02" }) {
