@@ -6,6 +6,7 @@
 #include "I18n.h"
 #include <dirent.h>
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl2.h"
 #include <cstdarg>
@@ -320,6 +321,34 @@ void Overlay::draw() {
 	}
 }
 
+void Overlay::dragScroll() {
+	const ImGuiIO& io = ImGui::GetIO();
+	const bool hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+	if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+		m_scrollCandidate = hovered;
+		m_scrollDragging = false;
+		if (hovered) m_scrollVelocity = 0.f;
+	}
+	if (m_scrollCandidate && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+		const ImVec2 total = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0.f);
+		if (!m_scrollDragging && std::fabs(total.y) > 10.f * m_scale && std::fabs(total.y) > std::fabs(total.x)) m_scrollDragging = true;
+		if (m_scrollDragging) {
+			ImGui::SetScrollY(ImGui::GetScrollY() - io.MouseDelta.y);
+			if (io.DeltaTime > 0.f) m_scrollVelocity = m_scrollVelocity * 0.6f + (-io.MouseDelta.y / io.DeltaTime) * 0.4f;
+			ImGui::ClearActiveID();
+		}
+	}
+	if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+		if (!m_scrollDragging) m_scrollVelocity = 0.f;
+		m_scrollCandidate = m_scrollDragging = false;
+	}
+	if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) && std::fabs(m_scrollVelocity) > 5.f) {
+		ImGui::SetScrollY(ImGui::GetScrollY() + m_scrollVelocity * io.DeltaTime);
+		m_scrollVelocity *= expf(-io.DeltaTime * 4.f);
+		if (ImGui::GetScrollY() <= 0.f || ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) m_scrollVelocity = 0.f;
+	}
+}
+
 void Overlay::drawMenu() {
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplSDL2_NewFrame();
@@ -335,8 +364,7 @@ void Overlay::drawMenu() {
 	auto content = [&](const std::function<void()>& body) {
 		ImGui::BeginChild("content", ImVec2(0, -footer), ImGuiChildFlags_None);
 		body();
-		if (ImGui::IsWindowHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Left) && !ImGui::IsAnyItemActive())
-			ImGui::SetScrollY(ImGui::GetScrollY() - io.MouseDelta.y);
+		dragScroll();
 		ImGui::EndChild();
 	};
 	auto tab = [](const char* key, const char* id) { return std::string(tr(key)) + "###" + id; };
