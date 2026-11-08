@@ -42,7 +42,7 @@ The touch scheme is chosen in the port menu (Controls > Touch screen), with the 
 - **Modern**: a finger landing on the left half is a virtual stick for movement (it starts where the finger lands:
   radius 14 % of the screen height, 8 % dead zone, with a response curve so small movements are fine and large ones
   fast); a finger on the right half drags the view directly, like the camera of mobile open world games (a swipe
-  across the whole screen width turns the camera about a third of a turn, scaled by the camera sensitivity, smoothed
+  across the whole screen width turns the camera a turn and a quarter, scaled by the camera sensitivity, smoothed
   over about 50 ms). While moving without touching the view for one second, the
   camera turns gradually behind the direction of movement (up to 1.2 rad/s), never swinging around when Bounce moves
   toward the camera.
