@@ -126,18 +126,24 @@ void PlayerInput::readTilt(float dt, float& tiltX, float& tiltY) {
 	if (length < 5.f) return;
 	float n[3];
 	for (int c = 0; c < 3; ++c) n[c] = m_gravity[c] / length;
+	const float sign = SDL_GetDisplayOrientation(0) == SDL_ORIENTATION_LANDSCAPE_FLIPPED ? -1.f : 1.f;
+	const float roll = atan2f(-sign * n[1], n[2]);
+	const float pitch = atan2f(sign * n[0], n[2]);
 	if (!m_hasNeutral || devices.recalibrationRequested()) {
-		for (int c = 0; c < 3; ++c) m_neutral[c] = n[c];
+		m_neutralRoll = roll;
+		m_neutralPitch = pitch;
 		m_hasNeutral = true;
 		devices.clearRecalibration();
 	}
-	const float sign = SDL_GetDisplayOrientation(0) == SDL_ORIENTATION_LANDSCAPE_FLIPPED ? -1.f : 1.f;
-	auto right = [&](const float* v) { return -sign * v[1]; };
-	auto up = [&](const float* v) { return sign * v[0]; };
+	auto angle = [](float a) {
+		while (a > 3.14159265f) a -= 6.2831853f;
+		while (a < -3.14159265f) a += 6.2831853f;
+		return a;
+	};
 	Config& cfg = Config::get();
-	const float sensitivity = cfg.num("controls.tilt_sensitivity", 1.f) / 0.34f;
-	float tx = -(right(n) - right(m_neutral)) * sensitivity;
-	float ty = -(up(n) - up(m_neutral)) * sensitivity;
+	const float sensitivity = cfg.num("controls.tilt_sensitivity", 1.f) / 0.35f;
+	float tx = -angle(roll - m_neutralRoll) * sensitivity;
+	float ty = -angle(pitch - m_neutralPitch) * sensitivity;
 	if (cfg.flag("controls.tilt_invert_x", false)) tx = -tx;
 	if (cfg.flag("controls.tilt_invert_y", false)) ty = -ty;
 	tx = clampUnit(tx);

@@ -57,8 +57,10 @@ The touch scheme is chosen in the port menu (Controls > Touch screen), with the 
 Chosen as the touch scheme in the port menu. While it is active the screen orientation is locked, so Android does not
 flip the screen (and the tilt axes) in the middle of a level. Tilting moves Bounce like on the N900 (full input at about 20 degrees,
 adjustable, with dead zones of 0.14 sideways and 0.08 forward; each axis can be inverted) and a sharp shake (more than
-12 m/s² away from the smoothed gravity, at most every 0.7 s) jumps; tilting, even quickly, does not. The tilt is measured on the normalized gravity, so its strength does not depend on the sensor's
-scale, and the smoothing starts from the first real reading. The neutral position is taken when the scheme is chosen,
+12 m/s² away from the smoothed gravity, at most every 0.7 s) jumps; tilting, even quickly, does not. The tilt is measured as the real angle of the phone around each screen axis (from the
+normalized gravity, with `atan2`), relative to the neutral position, so it responds the same forward and backward
+however upright the phone is held; measuring the gravity component instead (the sine of the angle) flattens out near
+vertical and made reversing almost impossible. The smoothing starts from the first real reading. The neutral position is taken when the scheme is chosen,
 when Bounce becomes controllable and when the game resumes, and can be taken by hand.
 
 As in the original, the camera is not controlled by the player in this scheme: where the level defines a camera guide
