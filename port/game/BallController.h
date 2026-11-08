@@ -114,8 +114,10 @@ private:
 	int m_guide = -1;
 	float m_guideS = 0.f;
 	bool m_useGuide = false;
+	std::function<bool(float, float, float&)> m_waterQuery;
 public:
 	void setGuidedCamera(bool on) { m_useGuide = on; }
+	void setWaterQuery(std::function<bool(float, float, float&)> query) { m_waterQuery = query; }
 	bool hasGuide() const { return m_guide >= 0; }
 private:
 	float m_autoFollowBlend = 0.f;

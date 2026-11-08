@@ -590,6 +590,10 @@ SessionResult LevelSession::run() {
 		}
 	}
 	m_water.reset(new WaterReflection(m_ctx, m_scene));
+	if (m_player) {
+		WaterReflection* water = m_water.get();
+		m_player->setWaterQuery([water](float x, float z, float& height) { return water->surfaceAt(x, z, height); });
+	}
 	setupCamera();
 	Devices::instance().openAll();
 	m_app.overlay->onQuit = [this]() {

@@ -80,3 +80,12 @@ direction from that camera point to that look point: its heading and its downwar
 0.75 rad), both eased at 3/s. The camera is then placed behind Bounce at the usual chase distance along that
 direction, so it keeps the original framing angles without sitting as far and high as the guide's own points.
 The other schemes keep the player controlled camera.
+
+## Camera collisions
+
+Every chase camera (player controlled or guided) traces a ray from Bounce to its desired position through the solid
+collision meshes; when something is in the way the camera moves in front of it (keeping at least 1.5 ball radii),
+immediately when getting closer so walls are never seen through, and with the usual smoothing when moving back out.
+Water is not a collision mesh, so the water surfaces found by the reflection (their height and extent) are checked
+too: while Bounce is above the water, the camera never goes below its surface. When Bounce falls in, the limit is
+lifted so the sinking plays as in the original.
