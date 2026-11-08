@@ -67,7 +67,7 @@ void BallController::buildCollision() {
 		meta.solid = (meta.group & 0x400) == 0;
 		std::string lower = name;
 		for (char& ch : lower) ch = (char)tolower((unsigned char)ch);
-		meta.cameraPassThrough = lower.compare(0, 4, "wall") == 0;
+		meta.cameraPassThrough = lower.compare(0, 4, "wall") == 0 || !meta.executeTrigger.empty();
 		const int id = m_world.addMesh(meta);
 		hgr::Mesh* mesh = static_cast<hgr::Mesh*>(n);
 		const math::float3x4 w = n->worldTransform();
