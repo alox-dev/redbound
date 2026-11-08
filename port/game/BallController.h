@@ -114,6 +114,7 @@ private:
 	int m_guide = -1;
 	float m_guideS = 0.f;
 	bool m_useGuide = false;
+	std::string m_cameraBlocker, m_lastCameraBlocker;
 	std::function<bool(float, float, float&)> m_waterQuery;
 public:
 	void setGuidedCamera(bool on) { m_useGuide = on; }

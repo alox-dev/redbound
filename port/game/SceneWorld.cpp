@@ -117,14 +117,22 @@ void SceneWorld::unlink(const std::vector<std::string>& nodes) {
 
 int SceneWorld::playAnimation(const std::string& nodeName, const std::string& anim, float start, float end, bool loop) {
 	hgr::Node* n = node(nodeName);
-	if (!n) return -1;
+	if (!n) {
+		if (m_unhandled.insert("no animation node " + nodeName).second) printf("[world] animation: node '%s' does not exist\n", nodeName.c_str());
+		return -1;
+	}
 	std::vector<hgr::TransformAnimationSet*> sets(1, m_scene->transformAnimations());
 	sets.insert(sets.end(), m_animationSets.begin(), m_animationSets.end());
 	P(hgr::TransformAnimation)* a = 0;
 	for (const std::string& name : { anim, nodeName })
 		for (hgr::TransformAnimationSet* set : sets)
 			if (!a && set && set->containsKey(name.c_str()) && set->get(name.c_str())) a = &set->get(name.c_str());
-	if (!a) return -1;
+	if (!a) {
+		if (m_unhandled.insert("no animation " + anim + "/" + nodeName).second)
+			printf("[world] animation '%s' for node '%s' not found\n", anim.c_str(), nodeName.c_str());
+		return -1;
+	}
+	if (getenv("REDBOUND_TRACE")) printf("[trace] animation '%s' on '%s' from %.2f to %.2f s\n", anim.c_str(), nodeName.c_str(), start, end);
 	Playing p;
 	p.node = n;
 	p.anim = *a;
