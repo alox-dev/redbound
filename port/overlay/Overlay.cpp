@@ -125,7 +125,7 @@ bool Overlay::init(SDL_Window* win, SDL_GLContext ctx) {
 	const float heightScale = dh > 0 ? dh / 720.f : 1.f;
 	float fontPx = touch ? std::max(2.9f * pxPerMm, 16.f * heightScale) : std::max(3.8f * pxPerMm, 22.f * heightScale * 0.85f);
 	const float diagonalIn = std::sqrt((float)dw * dw + (float)dh * dh) / (pxPerMm * 25.4f);
-	m_compact = touch || diagonalIn < 9.f || dh < 600 || getenv("REDBOUND_MENU_COMPACT");
+	m_compact = touch || diagonalIn < 7.f || dh < 480 || getenv("REDBOUND_MENU_COMPACT");
 	if (m_compact) fontPx = std::max(fontPx, 16.f);
 	m_scale = fontPx / 22.f;
 	const std::string font = findFont();
@@ -203,6 +203,13 @@ bool Overlay::handleTouchSlop(const SDL_Event& e) {
 		forward(m);
 	};
 	if (down) {
+		const float scrollbar = ImGui::GetStyle().ScrollbarSize * 1.5f;
+		if (m_contentW > 0.f && e.button.x >= m_contentX + m_contentW - scrollbar && e.button.x <= m_contentX + m_contentW &&
+		    e.button.y >= m_contentY && e.button.y <= m_contentY + m_contentH) {
+			m_touchState = TouchState::Passthrough;
+			moveTo(e.button.x, e.button.y);
+			return false;
+		}
 		m_touchState = TouchState::Pending;
 		m_heldDown = e;
 		m_touchStartX = m_touchLastX = e.button.x;
@@ -399,6 +406,11 @@ void Overlay::draw() {
 }
 
 void Overlay::dragScroll() {
+	const ImVec2 pos = ImGui::GetWindowPos(), size = ImGui::GetWindowSize();
+	m_contentX = pos.x;
+	m_contentY = pos.y;
+	m_contentW = ImGui::GetScrollMaxY() > 0.f ? size.x : 0.f;
+	m_contentH = size.y;
 	if (m_pendingScroll != 0.f) {
 		ImGui::SetScrollY(ImGui::GetScrollY() + m_pendingScroll);
 		m_pendingScroll = 0.f;
@@ -406,7 +418,8 @@ void Overlay::dragScroll() {
 	const ImGuiIO& io = ImGui::GetIO();
 	const bool hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
 	if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-		m_scrollCandidate = hovered;
+		const bool onScrollbar = m_contentW > 0.f && io.MousePos.x >= m_contentX + m_contentW - ImGui::GetStyle().ScrollbarSize * 1.5f;
+		m_scrollCandidate = hovered && !onScrollbar && io.MouseSource != ImGuiMouseSource_TouchScreen;
 		m_scrollDragging = false;
 		if (hovered) m_scrollVelocity = 0.f;
 	}

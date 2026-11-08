@@ -252,8 +252,8 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 	m_lookPendingY -= lookY;
 	const float lookSensitivity = cfg.num("controls.camera_sensitivity", 1.f);
 	const float aspect = height > 0 ? (float)width / (float)height : 1.f;
-	const float lookYaw = (lookX * 3.14159265f * 0.65f + m_holdYawSpeed * dt) * lookSensitivity;
-	const float lookPitch = lookY * 1.1f / std::max(1.f, aspect * 0.5f) * lookSensitivity * (cfg.flag("controls.invert_y", false) ? -1.f : 1.f);
+	const float lookYaw = (lookX * 3.14159265f * 2.5f + m_holdYawSpeed * dt) * lookSensitivity;
+	const float lookPitch = lookY * 2.4f / std::max(1.f, aspect * 0.5f) * lookSensitivity * (cfg.flag("controls.invert_y", false) ? -1.f : 1.f);
 	if (m_flickTime > 0.f) {
 		m_flickTime -= dt;
 		touchX = m_flickX;

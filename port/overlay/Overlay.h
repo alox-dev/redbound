@@ -54,6 +54,7 @@ private:
 	int m_touchStartX = 0, m_touchStartY = 0, m_touchLastX = 0, m_touchLastY = 0;
 	Uint32 m_touchLastTime = 0;
 	float m_pendingScroll = 0.f;
+	float m_contentX = 0.f, m_contentY = 0.f, m_contentW = 0.f, m_contentH = 0.f;
 	bool m_scrollCandidate = false, m_scrollDragging = false;
 	float m_scrollVelocity = 0.f;
 	void drawLabels();

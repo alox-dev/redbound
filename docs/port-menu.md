@@ -64,7 +64,8 @@ used for Ko-fi, which has no Font Awesome logo, and the notification icons). The
 On touch screens the menu applies a touch slop, as Android and iOS do: a touch is not handed to the controls right
 away. If the finger then moves vertically by more than about 10 points, the gesture is a scroll and the controls never
 see the touch, so no button activates and no slider moves. If it moves horizontally first (on a slider) or lifts
-without moving (a tap), the held touch is delivered to the control as is. Releasing a scroll with speed keeps the
+without moving (a tap), the held touch is delivered to the control as is. A touch that starts on the scrollbar goes
+straight to it, so the bar can still be dragged. Releasing a scroll with speed keeps the
 content moving with inertia. With a mouse, dragging anywhere on the content also scrolls, and a slider that jumps on
 press gets its previous value back when the drag turns into a scroll.
 
@@ -122,4 +123,4 @@ Languages can also be tested without rebuilding by placing the file in `~/.confi
 
 On touch devices (Android, and later Switch and Vita) the menu is compact, with text about 2.9 mm tall so more
 options fit. On desktop the text is larger (about 3.8 mm, or 22 px per 720 px of height scaled by 0.85, whichever is
-bigger), and the compact layout is used only for small windows (under 600 px high or 9 inches diagonal).
+bigger), and the compact layout is used only for small windows (under 480 px high or 7 inches diagonal).
