@@ -431,16 +431,23 @@ void BallController::checkVolumes() {
 
 void BallController::loadRails() {
 	m_rails.clear();
+	m_guides.clear();
+	m_guide = -1;
 	hgr::UserPropertySet* ups = m_scene->userProperties();
 	for (hgr::Node* n = m_scene->firstChild(); n; n = n->next(m_scene)) {
 		const std::string name = n->name().c_str();
 		if (name.compare(0, 2, "L_") != 0) continue;
 		hgr::Node* track = 0;
 		hgr::Node* normal = 0;
+		hgr::Node* camPos = 0;
+		hgr::Node* camLook = 0;
 		for (hgr::Node* c = n->firstChild(); c; c = c->next(n)) {
 			if (c->parent() != n || c->classId() != hgr::Node::NODE_LINES) continue;
-			if (std::string(c->name().c_str()) == "track") track = c;
-			else if (std::string(c->name().c_str()) == "tracknormal") normal = c;
+			const std::string child = c->name().c_str();
+			if (child == "track") track = c;
+			else if (child == "tracknormal") normal = c;
+			else if (child == "cameraposition") camPos = c;
+			else if (child == "cameralookat") camLook = c;
 		}
 		if (!track) continue;
 		auto segments = [](hgr::Node* node) {
@@ -453,6 +460,17 @@ void BallController::loadRails() {
 			}
 			return segs;
 		};
+		if (camPos && camLook) {
+			Guide g;
+			g.name = name;
+			g.track.build(RailTrack::chain(segments(track)), std::vector<Vec3>());
+			g.position.build(RailTrack::chain(segments(camPos)), std::vector<Vec3>());
+			g.lookAt.build(RailTrack::chain(segments(camLook)), std::vector<Vec3>());
+			if (g.track.valid() && g.position.valid() && g.lookAt.valid()) {
+				m_guides.push_back(g);
+				printf("camera guide %s: track %.0f, camera path %.0f, look path %.0f\n", name.c_str(), g.track.length(), g.position.length(), g.lookAt.length());
+			}
+		}
 		Rail r;
 		r.name = name;
 		std::vector<size_t> breaks;
@@ -485,6 +503,16 @@ void BallController::processRequests() {
 		case SceneWorld::BallRequest::ATTACH_RAIL: {
 			const int i = findRail(r.name);
 			if (i >= 0) { m_rail = i; m_railS = m_rails[i].track.closest(m_ball.position).s; }
+			break;
+		}
+		case SceneWorld::BallRequest::SET_GUIDE: {
+			m_guide = -1;
+			for (size_t i = 0; i < m_guides.size(); ++i)
+				if (m_guides[i].name == r.name) {
+					m_guide = (int)i;
+					m_guideS = m_guides[i].track.closest(m_ball.position).s;
+				}
+			printf("camera guide: %s\n", m_guide >= 0 ? (r.name + " active").c_str() : ("off (" + r.name + ")").c_str());
 			break;
 		}
 		case SceneWorld::BallRequest::DETACH_RAIL:
@@ -808,7 +836,17 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 	const float r = m_ball.params.radius;
 	Vec3 target = m_ball.position + Vec3(0, r * 0.5f, 0);
 	Vec3 desired = m_ball.position - m_heading * (r * 12.f) + Vec3(0, r * 8.f, 0);
-	if (m_modern) {
+	const bool guided = m_useGuide && m_guide >= 0 && m_rail < 0;
+	if (guided) {
+		const Guide& g = m_guides[m_guide];
+		const RailSample s = g.track.closestNear(m_ball.position, m_guideS, g.track.length() * 0.1f, g.track.length() * 0.1f);
+		m_guideS = s.s;
+		const float fraction = g.track.length() > 0.f ? s.s / g.track.length() : 0.f;
+		desired = g.position.at(fraction * g.position.length()).pos;
+		target = g.lookAt.at(fraction * g.lookAt.length()).pos;
+		const Vec3 view = target - desired;
+		if (Vec3(view.x, 0.f, view.z).length() > 1e-3f) m_camYaw = atan2f(view.x, view.z);
+	} else if (m_modern) {
 		const float dist = r * 14.4f;
 		const float minElevation = 0.12f;
 		const float elevation = std::max(minElevation, m_camPitch);
@@ -817,7 +855,7 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 		target = target + Vec3(0.f, (minElevation - std::min(minElevation, m_camPitch)) * dist * 1.5f, 0.f);
 	}
 	if (!m_camInit) { m_camPos = desired; m_camLook = target; m_camInit = true; }
-	const float k = 1.f - expf(-dt * (m_modern ? 9.f : 3.f));
+	const float k = 1.f - expf(-dt * (guided ? 4.f : m_modern ? 9.f : 3.f));
 	m_camPos += (desired - m_camPos) * k;
 	m_camLook += (target - m_camLook) * (1.f - expf(-dt * 8.f));
 	cam->setPosition(math::float3(m_camPos.x, m_camPos.y, m_camPos.z));

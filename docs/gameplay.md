@@ -68,3 +68,12 @@ working as before.
   the end, and the results show the distance and the top three records.
 - The rail camera sits behind and above Bounce (height 158, distance 465) and rolls with the track.
 - The sky (`skybox=1`) is drawn separately before the scene, unlit, at infinity and without writing depth.
+
+## Camera guides
+
+A level can define camera guides: `L_` nodes with three line children, `track`, `cameraposition` and
+`cameralookat` (level 1 has `L_bmmbh`). The action `setguidingobject,<node>` makes one the active guide; naming a node
+without camera lines (level 1 uses `O_guidingobject`) turns it off. While a guide is active and the touch scheme is the
+accelerometer, the camera finds Bounce's closest point on `track` (searching near the previous one, so loops and
+crossings do not jump), takes the same fraction of the length along `cameraposition` and `cameralookat`, and moves
+there with a smoothing rate of 4/s. The other schemes keep the player controlled camera.

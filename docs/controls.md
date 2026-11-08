@@ -52,12 +52,16 @@ The touch scheme is chosen in the port menu (Controls > Touch screen), with the 
 - Touches are checked against the fingers SDL reports on the screen every frame, so a finger lifted while a menu was
   open never stays active, and switching to the accelerometer clears every touch state.
 
-## Accelerometer (experimental)
+## Accelerometer
 
-Chosen as the touch scheme in the port menu. Tilting moves Bounce like on the N900 (full input at about 20 degrees, adjustable,
-with dead zones of 0.14 sideways and 0.08 forward; each axis can be inverted) and shaking (more than 7 m/s² from
-gravity) jumps. The neutral position is taken when Bounce becomes controllable and when the game resumes, and can be
-taken by hand. The camera follows the path (default) or stays fixed. Its camera behavior is still being tuned.
+Chosen as the touch scheme in the port menu. Tilting moves Bounce like on the N900 (full input at about 20 degrees,
+adjustable, with dead zones of 0.14 sideways and 0.08 forward; each axis can be inverted) and shaking (more than
+7 m/s² from gravity) jumps. The neutral position is taken when Bounce becomes controllable and when the game resumes,
+and can be taken by hand.
+
+As in the original, the camera is not controlled by the player in this scheme: where the level defines a camera guide
+(`setguidingobject`, see `gameplay.md`), the camera follows it; elsewhere it follows the path (default) or stays
+fixed. Tilting is always relative to where the camera looks.
 
 ## Pause and menus
 
