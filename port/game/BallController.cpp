@@ -842,10 +842,21 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 		const RailSample s = g.track.closestNear(m_ball.position, m_guideS, g.track.length() * 0.1f, g.track.length() * 0.1f);
 		m_guideS = s.s;
 		const float fraction = g.track.length() > 0.f ? s.s / g.track.length() : 0.f;
-		desired = g.position.at(fraction * g.position.length()).pos;
-		target = g.lookAt.at(fraction * g.lookAt.length()).pos;
-		const Vec3 view = target - desired;
-		if (Vec3(view.x, 0.f, view.z).length() > 1e-3f) m_camYaw = atan2f(view.x, view.z);
+		const Vec3 guidePos = g.position.at(fraction * g.position.length()).pos;
+		const Vec3 guideLook = g.lookAt.at(fraction * g.lookAt.length()).pos;
+		const Vec3 view = guideLook - guidePos;
+		const float flat = Vec3(view.x, 0.f, view.z).length();
+		if (flat > 1e-3f) {
+			float d = atan2f(view.x, view.z) - m_camYaw;
+			while (d > 3.14159265f) d -= 6.2831853f;
+			while (d < -3.14159265f) d += 6.2831853f;
+			m_camYaw += d * std::min(1.f, dt * 3.f);
+			const float guidePitch = std::max(0.15f, std::min(0.75f, atan2f(-view.y, flat)));
+			m_camPitch += (guidePitch - m_camPitch) * std::min(1.f, dt * 3.f);
+		}
+		const float dist = r * 14.4f;
+		const Vec3 back(-sinf(m_camYaw) * cosf(m_camPitch), sinf(m_camPitch), -cosf(m_camYaw) * cosf(m_camPitch));
+		desired = m_ball.position + back * dist;
 	} else if (m_modern) {
 		const float dist = r * 14.4f;
 		const float minElevation = 0.12f;
@@ -855,7 +866,7 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 		target = target + Vec3(0.f, (minElevation - std::min(minElevation, m_camPitch)) * dist * 1.5f, 0.f);
 	}
 	if (!m_camInit) { m_camPos = desired; m_camLook = target; m_camInit = true; }
-	const float k = 1.f - expf(-dt * (guided ? 4.f : m_modern ? 9.f : 3.f));
+	const float k = 1.f - expf(-dt * (guided || m_modern ? 9.f : 3.f));
 	m_camPos += (desired - m_camPos) * k;
 	m_camLook += (target - m_camLook) * (1.f - expf(-dt * 8.f));
 	cam->setPosition(math::float3(m_camPos.x, m_camPos.y, m_camPos.z));

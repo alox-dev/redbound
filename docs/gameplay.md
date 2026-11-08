@@ -75,5 +75,8 @@ A level can define camera guides: `L_` nodes with three line children, `track`, 
 `cameralookat` (level 1 has `L_bmmbh`). The action `setguidingobject,<node>` makes one the active guide; naming a node
 without camera lines (level 1 uses `O_guidingobject`) turns it off. While a guide is active and the touch scheme is the
 accelerometer, the camera finds Bounce's closest point on `track` (searching near the previous one, so loops and
-crossings do not jump), takes the same fraction of the length along `cameraposition` and `cameralookat`, and moves
-there with a smoothing rate of 4/s. The other schemes keep the player controlled camera.
+crossings do not jump), takes the same fraction of the length along `cameraposition` and `cameralookat`, and uses the
+direction from that camera point to that look point: its heading and its downward angle (clamped between 0.15 and
+0.75 rad), both eased at 3/s. The camera is then placed behind Bounce at the usual chase distance along that
+direction, so it keeps the original framing angles without sitting as far and high as the guide's own points.
+The other schemes keep the player controlled camera.
