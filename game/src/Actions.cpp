@@ -41,16 +41,39 @@ public:
 
 class Delay : public Action {
 public:
-	explicit Delay(float s) : m_total(s) {}
+	explicit Delay(Operand total) : m_total(total) {}
 	bool update(ActionContext& c) override {
+		if (!m_started) {
+			m_duration = m_total.get(c.world);
+			m_started = true;
+		}
 		m_t += c.dt;
-		if (m_t < m_total) return false;
+		if (m_t < m_duration) return false;
 		m_t = 0.f;
+		m_started = false;
 		return true;
 	}
-	void reset() override { m_t = 0.f; }
+	void reset() override {
+		m_t = 0.f;
+		m_started = false;
+	}
 private:
-	float m_total, m_t = 0.f;
+	Operand m_total;
+	float m_duration = 0.f, m_t = 0.f;
+	bool m_started = false;
+};
+
+class RandomValue : public Action {
+public:
+	RandomValue(std::string var, Operand low, Operand high) : m_var(var), m_low(low), m_high(high) {}
+	bool update(ActionContext& c) override {
+		const float low = m_low.get(c.world), high = m_high.get(c.world);
+		c.world.setVariable(m_var, low + (high - low) * (float)std::rand() / (float)RAND_MAX);
+		return true;
+	}
+private:
+	std::string m_var;
+	Operand m_low, m_high;
 };
 
 class RandomDelay : public Action {
@@ -326,7 +349,10 @@ ActionRegistry::ActionRegistry() {
 		add(n, [](const ActionArgs& a) { return std::unique_ptr<Action>(new Generic(a.args)); });
 
 	add("nop", [](const ActionArgs&) { return std::unique_ptr<Action>(new Nop); });
-	add("delay", [](const ActionArgs& a) { return std::unique_ptr<Action>(new Delay(argf(a, 0))); });
+	add("delay", [](const ActionArgs& a) { return std::unique_ptr<Action>(new Delay(Operand::parse(arg(a, 0)))); });
+	add("random", [](const ActionArgs& a) {
+		return std::unique_ptr<Action>(new RandomValue(arg(a, 0), Operand::parse(arg(a, 1)), Operand::parse(a.args.size() > 2 ? arg(a, 2) : std::string("1"))));
+	});
 	add("randomdelay", [](const ActionArgs& a) { return std::unique_ptr<Action>(new RandomDelay(argf(a, 0), argf(a, 1, argf(a, 0)))); });
 	add("jumptoaction", [](const ActionArgs& a) { return std::unique_ptr<Action>(new JumpToAction(target(a, 0))); });
 	add("jumptorandomaction", [](const ActionArgs& a) {

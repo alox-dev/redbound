@@ -92,6 +92,11 @@ closer so walls are never seen through, and with the usual smoothing when moving
 mesh, so the water surfaces found by the reflection (their height and extent) are checked too: the camera never goes
 below a water surface, also after Bounce falls in, so the fall keeps its illusion.
 
+Some solid meshes are ignored by the camera rays: the invisible boundary walls (collision meshes named `wall*`, such
+as `walls`, `wall_cd` and `wall_cde` in level 1) and the meshes that only exist to fire a trigger (with
+`executetrigger`, such as `watercollision`, which detects falling into the water). They stop or detect the ball, but
+the camera can look in from outside the play area and over the water.
+
 ## Eye animations
 
 The ball model (`resources/models/bounce.hgr`) has its own triggers for the eyes: `T_bounce_lookat_eyes_anim01`

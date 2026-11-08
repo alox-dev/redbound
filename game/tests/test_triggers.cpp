@@ -76,6 +76,17 @@ static void testDelay() {
 	CHECK(w.log.size() == 1 && w.log[0] == "activate T_next");
 }
 
+static void testRandomDelay() {
+	printf("random stores a value that delay waits for (eye blinking)\n");
+	MockWorld w; Trigger t("T_blink");
+	t.parse("state=2\na01=random,blinkDelay,0.5,0.5\na02=delay,blinkDelay\na03=activatetrigger,T_next\n");
+	run(t, w, 20);
+	CHECK(w.getVariable("blinkDelay") > 0.49f && w.getVariable("blinkDelay") < 0.51f);
+	CHECK(w.log.empty());
+	run(t, w, 15);
+	CHECK(w.log.size() == 1 && w.log[0] == "activate T_next");
+}
+
 static void testLoop() {
 	printf("loop with counter and exit by condition\n");
 	MockWorld w; Trigger t("T_loop");
@@ -204,6 +215,7 @@ static void testOriginalTable() {
 int main() {
 	testConditionalSkip();
 	testDelay();
+	testRandomDelay();
 	testLoop();
 	testWaitWithoutTarget();
 	testExitListAndRepeat();
