@@ -34,8 +34,8 @@ name is shown as text.
 
 ## Notifications
 
-Short notices appear at the top right for a few seconds, stacked up to four, with an icon and a fade: the welcome
-message with the shortcut to this menu, a saved screenshot, a controller connected or disconnected, a change of input
+Short notices appear at the top right for a few seconds, stacked up to four, with an icon and a fade: a saved
+screenshot, a controller connected or disconnected, a change of input
 device (keyboard, keyboard and mouse, controller, touch screen, accelerometer; at most one every 1.5 s), cleared
 records, accelerometer calibration and an available update. They are drawn after the F2 screenshot is taken, so they
 never appear in screenshots, and are also written to the log.

@@ -55,7 +55,6 @@ private:
 	std::vector<Notice> m_notices;
 	Uint32 m_lastNoticeTicks = 0;
 	bool m_updateNotified = false;
-	bool m_welcomed = false;
 	struct Label {
 		std::string text;
 		float rightPx = 0.f, centerYPx = 0.f, heightPx = 0.f;

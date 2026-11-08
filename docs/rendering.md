@@ -63,3 +63,9 @@ not reported as missing.
 so the cache entry is released when its texture is destroyed and rebuilt whenever it belongs to a different texture
 or size; otherwise a recreated target (the water reflection after a render scale change) would keep drawing into the
 deleted texture. Textures register with their context, which detaches them when it is destroyed first.
+
+## Coplanar decals
+
+The level 2 boost arrows (`Boost06` to `Boost36`) are two quads in the same plane as the track: the arrow
+(`rail_boost`) and its glow (`boost_glow`). Without help they fight the track for depth and flicker, so the arrow is
+drawn with a small polygon offset in front of the track and the glow with a larger one in front of the arrow.
