@@ -84,6 +84,8 @@ private:
 		P(hgr::TransformAnimation) anim;
 		float time, start, end;
 		bool loop, done;
+		math::float3x4 from;
+		float blend = 0.f, blendElapsed = 0.f;
 	};
 
 	struct Moving {

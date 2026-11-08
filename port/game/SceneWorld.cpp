@@ -125,9 +125,13 @@ int SceneWorld::playAnimation(const std::string& nodeName, const std::string& an
 	std::vector<hgr::TransformAnimationSet*> sets(1, m_scene->transformAnimations());
 	sets.insert(sets.end(), m_animationSets.begin(), m_animationSets.end());
 	P(hgr::TransformAnimation)* a = 0;
+	bool fromModel = false;
 	for (const std::string& name : { anim, nodeName })
-		for (hgr::TransformAnimationSet* set : sets)
-			if (!a && set && set->containsKey(name.c_str()) && set->get(name.c_str())) a = &set->get(name.c_str());
+		for (size_t s = 0; s < sets.size(); ++s)
+			if (!a && sets[s] && sets[s]->containsKey(name.c_str()) && sets[s]->get(name.c_str())) {
+				a = &sets[s]->get(name.c_str());
+				fromModel = s > 0;
+			}
 	if (!a) {
 		if (m_unhandled.insert("no animation " + anim + "/" + nodeName).second)
 			printf("[world] animation '%s' for node '%s' not found\n", anim.c_str(), nodeName.c_str());
@@ -142,6 +146,10 @@ int SceneWorld::playAnimation(const std::string& nodeName, const std::string& an
 	p.time = start;
 	p.loop = loop;
 	p.done = false;
+	if (fromModel) {
+		p.from = n->transform();
+		p.blend = 0.12f;
+	}
 	const int id = m_nextAnim++;
 	m_playing[id] = p;
 	return id;
@@ -335,6 +343,13 @@ void SceneWorld::update(float dt) {
 				else { p.time = p.end; p.done = true; }
 			}
 			p.anim->eval(p.time, &tm);
+			if (p.blend > 0.f && p.blendElapsed < p.blend) {
+				p.blendElapsed += dt;
+				float t = std::min(1.f, p.blendElapsed / p.blend);
+				t = t * t * (3.f - 2.f * t);
+				for (int r = 0; r < 3; ++r)
+					for (int c = 0; c < 4; ++c) tm(r, c) = p.from(r, c) + (tm(r, c) - p.from(r, c)) * t;
+			}
 			p.node->setTransform(tm);
 		}
 		if (p.done && p.time > p.end + 10.f) it = m_playing.erase(it);
