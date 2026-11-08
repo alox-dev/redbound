@@ -46,7 +46,8 @@ int SceneWorld::triggerState(const std::string& name) const {
 
 hgr::Node* SceneWorld::node(const std::string& name) const {
 	std::map<std::string, P(hgr::Node)>::const_iterator it = m_nodes.find(name);
-	return it == m_nodes.end() ? 0 : (hgr::Node*)it->second;
+	if (it != m_nodes.end()) return (hgr::Node*)it->second;
+	return m_scene ? m_scene->findNodeByName(name.c_str()) : 0;
 }
 
 float SceneWorld::getVariable(const std::string& name) const {
