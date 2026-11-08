@@ -46,6 +46,9 @@ private:
 	bool m_screenshotRequested = false;
 	bool m_confirmClear = false;
 	void drawMenu();
+	void dragScroll();
+	bool m_scrollCandidate = false, m_scrollDragging = false;
+	float m_scrollVelocity = 0.f;
 	void drawLabels();
 	void drawNotices();
 	struct Notice {

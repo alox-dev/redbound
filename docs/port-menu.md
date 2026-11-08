@@ -58,6 +58,13 @@ used for Ko-fi, which has no Font Awesome logo, and the notification icons). The
 `port/overlay/Icons.h`. They are merged into the menu font at startup; the license is in
 `assets/fonts/LICENSE-FontAwesome.txt`.
 
+## Scrolling
+
+The content scrolls by dragging anywhere on it, as in touch apps, also when the drag starts on a button or a row: once
+the finger (or mouse) moves more than about 10 points vertically, the gesture becomes a scroll and the control under it
+is released without being activated. Horizontal drags still move sliders. Releasing with speed keeps the content
+moving with inertia until it slows down or reaches an end.
+
 ## Layout
 
 Sizes are computed in physical millimeters from the display density (text about 3.4 mm high). On touch screens or
