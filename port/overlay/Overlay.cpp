@@ -299,14 +299,6 @@ void Overlay::drawNotices() {
 
 void Overlay::draw() {
 	if (!m_ready) return;
-	if (!m_welcomed) {
-		m_welcomed = true;
-#ifdef __ANDROID__
-		notify(format(tr("notice.welcome_touch"), REDBOUND_VERSION), icon::info, 5.f);
-#else
-		notify(format(tr("notice.welcome_desktop"), REDBOUND_VERSION), icon::info, 5.f);
-#endif
-	}
 	if (!m_updateNotified && updateState() == UpdateState::Available) {
 		m_updateNotified = true;
 		notify(format(tr("notice.update_available"), latestVersion().c_str()), icon::update, 7.f);
