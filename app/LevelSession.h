@@ -74,6 +74,7 @@ private:
 	int m_mouseTravel = 0;
 	int m_stickNav = 0;
 	bool m_orientationLocked = false;
+	P(hgr::Scene) m_ballScene;
 	SceneTarget m_sceneTarget;
 	float m_fps = 0.f, m_fpsTime = 0.f;
 	int m_fpsFrames = 0;

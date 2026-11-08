@@ -65,6 +65,9 @@ void BallController::buildCollision() {
 		meta.group = atoi(prop(props, "group").c_str());
 		meta.executeTrigger = prop(props, "executetrigger");
 		meta.solid = (meta.group & 0x400) == 0;
+		std::string lower = name;
+		for (char& ch : lower) ch = (char)tolower((unsigned char)ch);
+		meta.cameraPassThrough = lower.compare(0, 4, "wall") == 0;
 		const int id = m_world.addMesh(meta);
 		hgr::Mesh* mesh = static_cast<hgr::Mesh*>(n);
 		const math::float3x4 w = n->worldTransform();
@@ -879,7 +882,7 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 			for (int i = -1; i <= 1; ++i) {
 				Vec3 hit, normal;
 				const Vec3 from = target + side * (float)i;
-				if (m_world.ray(from, dir, length + r * 0.5f, hit, normal)) {
+				if (m_world.ray(from, dir, length + r * 0.5f, hit, normal, true)) {
 					++hits;
 					clear = std::min(clear, std::max(r * 1.5f, (hit - from).length() - r * 0.8f));
 				}

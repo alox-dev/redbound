@@ -60,11 +60,12 @@ used for Ko-fi, which has no Font Awesome logo, and the notification icons). The
 
 ## Scrolling
 
-The content scrolls by dragging anywhere on it, as in touch apps, also when the drag starts on a button or a row: once
-the finger (or mouse) moves more than about 10 points vertically, the gesture becomes a scroll and the control under it
-is released without being activated. A slider jumps to the touched value as soon as it is pressed, so when the gesture
-turns into a scroll the slider gets back the value it had before the touch. Horizontal drags still move sliders. Releasing with speed keeps the content
-moving with inertia until it slows down or reaches an end.
+On touch screens the menu applies a touch slop, as Android and iOS do: a touch is not handed to the controls right
+away. If the finger then moves vertically by more than about 10 points, the gesture is a scroll and the controls never
+see the touch, so no button activates and no slider moves. If it moves horizontally first (on a slider) or lifts
+without moving (a tap), the held touch is delivered to the control as is. Releasing a scroll with speed keeps the
+content moving with inertia. With a mouse, dragging anywhere on the content also scrolls, and a slider that jumps on
+press gets its previous value back when the drag turns into a scroll.
 
 ## Layout
 

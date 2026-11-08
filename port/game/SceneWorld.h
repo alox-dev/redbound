@@ -66,6 +66,7 @@ public:
 	void link(const std::string& parent, const std::vector<std::string>& nodes) override;
 	void unlink(const std::vector<std::string>& nodes) override;
 	int playAnimation(const std::string& node, const std::string& anim, float start, float end, bool loop) override;
+	void addAnimationSet(hgr::TransformAnimationSet* set) { if (set) m_animationSets.push_back(set); }
 	bool animationDone(int id) const override;
 	int startTransform(TransformKind kind, const std::string& object, const std::string& subnode,
 	                   float x, float y, float z, float duration) override;
@@ -99,6 +100,7 @@ private:
 	std::map<hgr::Node*, std::pair<float, float> > m_uvOffset;
 	float m_fade = 0.f;
 	int m_fadeColor = 0;
+	std::vector<hgr::TransformAnimationSet*> m_animationSets;
 	std::map<std::string, P(hgr::Node)> m_nodes;
 	std::map<std::string, std::unique_ptr<Trigger>> m_triggers;
 	std::map<std::string, float> m_vars, m_persistent;
