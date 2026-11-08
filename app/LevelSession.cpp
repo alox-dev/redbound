@@ -195,6 +195,17 @@ void LevelSession::setupPlayer() {
 				m_player->setFormInfo(v.substr(0, v.find_first_of("\r\n")));
 			}
 		}
+	if (hgr::UserPropertySet* props = ballScene->userProperties()) {
+		int eyeTriggers = 0;
+		for (const char* name : { "T_bounce_lookat_eyes_anim01", "T_bounce_lookat_eyes_anim02" }) {
+			if (!props->containsKey(name) || m_world->triggerState(name) >= 0) continue;
+			m_world->addTrigger(name, props->get(name).c_str());
+			m_world->setTriggerEnabled(name, true);
+			m_world->activateTrigger(name);
+			++eyeTriggers;
+		}
+		if (eyeTriggers) printf("ball: %d eye animation triggers (blinking, eyebrows)\n", eyeTriggers);
+	}
 	applyModelPose(ballScene);
 	m_player->setBallModel(m_ballRoot);
 	m_player->createShadow(m_ctx);
