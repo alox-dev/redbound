@@ -1,4 +1,5 @@
 #include "LevelSession.h"
+#include "AndroidBridge.h"
 #include "Icons.h"
 #include "I18n.h"
 #include <cstdarg>
@@ -194,6 +195,19 @@ void LevelSession::setupPlayer() {
 				m_player->setFormInfo(v.substr(0, v.find_first_of("\r\n")));
 			}
 		}
+	m_ballScene = ballScene;
+	m_world->addAnimationSet(ballScene->transformAnimations());
+	if (hgr::UserPropertySet* props = ballScene->userProperties()) {
+		int eyeTriggers = 0;
+		for (const char* name : { "T_bounce_lookat_eyes_anim01", "T_bounce_lookat_eyes_anim02" }) {
+			if (!props->containsKey(name) || m_world->triggerState(name) >= 0) continue;
+			m_world->addTrigger(name, props->get(name).c_str());
+			m_world->setTriggerEnabled(name, true);
+			m_world->activateTrigger(name);
+			++eyeTriggers;
+		}
+		if (eyeTriggers) printf("ball: %d eye animation triggers (blinking, eyebrows)\n", eyeTriggers);
+	}
 	applyModelPose(ballScene);
 	m_player->setBallModel(m_ballRoot);
 	m_player->createShadow(m_ctx);
@@ -428,6 +442,13 @@ void LevelSession::updateWorld(float dt) {
 
 void LevelSession::updatePlayer(float dt) {
 	const PlayerCommand cmd = m_input.update(dt, m_app.width, m_app.height, m_player->controllable());
+	const bool tilt = PlayerInput::touchScheme() == "accelerometer";
+	if (tilt != m_orientationLocked) {
+		m_orientationLocked = tilt;
+		androidSetOrientationLocked(tilt);
+		if (tilt) Devices::instance().requestRecalibration();
+	}
+	m_player->setGuidedCamera(tilt);
 	m_player->setModernInput(cmd.modern, cmd.moveX, cmd.moveY, cmd.cameraYaw, cmd.cameraPitch, cmd.followPath, cmd.autoFollow);
 	m_player->update(dt, cmd.forward, cmd.turn, cmd.jump);
 	m_player->updateChaseCamera(m_camera, dt);
@@ -542,10 +563,7 @@ void LevelSession::render(float realDt, bool paused, bool liveBlur) {
 		m_sceneTarget.end(w, h);
 		m_ctx->setViewport(gr::Rect(0, 0, w, h));
 	}
-	if (m_followGameCamera) {
-		const bool attractionDemo = !m_player && m_world->getVariable("attraction") == 1.f;
-		m_fade.draw(m_world->fadeAmount(), attractionDemo || m_world->fadeColor() != 0);
-	}
+	if (m_followGameCamera) m_fade.draw(m_world->fadeAmount(), m_world->fadeColor() == 0);
 	if (m_hasUi) {
 		Ui& ui = *m_ui;
 		if (m_needCapture) {
@@ -589,6 +607,10 @@ SessionResult LevelSession::run() {
 		}
 	}
 	m_water.reset(new WaterReflection(m_ctx, m_scene));
+	if (m_player) {
+		WaterReflection* water = m_water.get();
+		m_player->setWaterQuery([water](float x, float z, float& height) { return water->surfaceAt(x, z, height); });
+	}
 	setupCamera();
 	Devices::instance().openAll();
 	m_app.overlay->onQuit = [this]() {
@@ -650,6 +672,7 @@ SessionResult LevelSession::run() {
 		m_ctx->present();
 	}
 	setMouseCapture(false);
+	if (m_orientationLocked) androidSetOrientationLocked(false);
 	m_app.overlay->setAudio(0);
 	return m_result;
 }

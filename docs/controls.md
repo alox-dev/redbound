@@ -37,29 +37,36 @@ generic joysticks. Controllers connected before or during a level are picked up 
 
 ## Touch
 
-One adaptive scheme covers one handed and two handed play:
+The touch scheme is chosen in the port menu (Controls > Touch screen), with the modern scheme by default:
 
-- **First finger**: swiping moves Bounce relative to the camera (a virtual stick that starts where the finger lands:
-  radius 8 % of the screen height, 12 % dead zone; a quick flick released within 220 ms keeps him sliding for
-  0.35 s). Holding the finger still for 200 ms rotates the camera toward that side of the screen, easing in and out
-  (up to 1.8 rad/s, scaled by the camera sensitivity).
-- **Second finger**, while the first is down: drags the view directly, like the camera of mobile open world games:
-  a swipe across the whole screen width turns the camera half a turn (scaled by the camera sensitivity), smoothed
-  over about 50 ms so the camera follows the finger without jitter and settles as soon as the finger stops.
-- **Automatic follow**: while the first finger moves Bounce and the view has not been touched for one second, the
-  camera turns gradually behind the direction of movement (up to 1.2 rad/s, easing in over about half a second); it
-  never swings around when Bounce moves toward the camera.
+- **Modern**: a finger landing on the left half is a virtual stick for movement (it starts where the finger lands:
+  radius 14 % of the screen height, 8 % dead zone, with a response curve so small movements are fine and large ones
+  fast); a finger on the right half drags the view directly, like the camera of mobile open world games (a swipe
+  across the whole screen width turns the camera a turn and a quarter, scaled by the camera sensitivity, smoothed
+  over about 50 ms). While moving without touching the view for one second, the
+  camera turns gradually behind the direction of movement (up to 1.2 rad/s), never swinging around when Bounce moves
+  toward the camera.
+- **Classic** (in the style of Bounce Touch): one finger anywhere swipes to move relative to the camera (a quick
+  flick released within 220 ms keeps Bounce sliding for 0.35 s); holding it still for 200 ms rotates the camera
+  toward that side of the screen, easing in and out (up to 1.8 rad/s, scaled by the camera sensitivity).
+- In both, a **double tap** (two short taps within 350 ms) jumps, and the top left corner pauses.
 - Touches are checked against the fingers SDL reports on the screen every frame, so a finger lifted while a menu was
-  open (when the menu, not the game, receives the release) never stays active. Turning the accelerometer on clears
-  every touch state.
-- **Double tap** with any finger (two short taps within 350 ms) jumps.
+  open never stays active, and switching to the accelerometer clears every touch state.
 
-## Accelerometer (experimental)
+## Accelerometer
 
-Enabled by hand in the port menu. Tilting moves Bounce like on the N900 (full input at about 20 degrees, adjustable,
-with dead zones of 0.14 sideways and 0.08 forward; each axis can be inverted) and shaking (more than 7 m/s² from
-gravity) jumps. The neutral position is taken when Bounce becomes controllable and when the game resumes, and can be
-taken by hand. The camera follows the path (default) or stays fixed. Its camera behavior is still being tuned.
+Chosen as the touch scheme in the port menu. While it is active the screen orientation is locked, so Android does not
+flip the screen (and the tilt axes) in the middle of a level. Tilting moves Bounce like on the N900 (full input at about 20 degrees,
+adjustable, with dead zones of 0.14 sideways and 0.08 forward; each axis can be inverted) and a sharp shake (more than
+12 m/s² away from the smoothed gravity, at most every 0.7 s) jumps; tilting, even quickly, does not. The tilt is measured as the real angle of the phone around each screen axis (from the
+normalized gravity, with `atan2`), relative to the neutral position, so it responds the same forward and backward
+however upright the phone is held; measuring the gravity component instead (the sine of the angle) flattens out near
+vertical and made reversing almost impossible. The smoothing starts from the first real reading. The neutral position is taken when the scheme is chosen,
+when Bounce becomes controllable and when the game resumes, and can be taken by hand.
+
+As in the original, the camera is not controlled by the player in this scheme: where the level defines a camera guide
+(`setguidingobject`, see `gameplay.md`), the camera follows it; elsewhere it follows the path (default) or stays
+fixed. Tilting is always relative to where the camera looks.
 
 ## Pause and menus
 

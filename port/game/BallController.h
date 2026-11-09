@@ -106,6 +106,21 @@ private:
 	bool m_modernReq = false, m_modern = false;
 	bool m_followPath = false;
 	bool m_autoFollow = false;
+	struct Guide {
+		std::string name;
+		RailTrack track, position, lookAt;
+	};
+	std::vector<Guide> m_guides;
+	int m_guide = -1;
+	float m_guideS = 0.f;
+	bool m_useGuide = false;
+	std::string m_cameraBlocker, m_lastCameraBlocker;
+	std::function<bool(float, float, float&)> m_waterQuery;
+public:
+	void setGuidedCamera(bool on) { m_useGuide = on; }
+	void setWaterQuery(std::function<bool(float, float, float&)> query) { m_waterQuery = query; }
+	bool hasGuide() const { return m_guide >= 0; }
+private:
 	float m_autoFollowBlend = 0.f;
 	float m_eyeDistLocal = 0.f;
 	float m_mx = 0.f, m_my = 0.f, m_dCamYaw = 0.f, m_dCamPitch = 0.f;

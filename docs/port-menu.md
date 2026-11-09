@@ -34,8 +34,8 @@ name is shown as text.
 
 ## Notifications
 
-Short notices appear at the top right for a few seconds, stacked up to four, with an icon and a fade: the welcome
-message with the shortcut to this menu, a saved screenshot, a controller connected or disconnected, a change of input
+Short notices appear at the top right for a few seconds, stacked up to four, with an icon and a fade: a saved
+screenshot, a controller connected or disconnected, a change of input
 device (keyboard, keyboard and mouse, controller, touch screen, accelerometer; at most one every 1.5 s), cleared
 records, accelerometer calibration and an available update. They are drawn after the F2 screenshot is taken, so they
 never appear in screenshots, and are also written to the log.
@@ -48,7 +48,8 @@ redirect to `/releases/tag/vX.Y.Z`, which always points to the latest regular re
 skipped) and is not subject to the GitHub API rate limit. Versions are compared numerically (`1.10.0` is newer than
 `1.9.0`). No data about the player or the device is sent beyond a normal web request. When a newer version exists, a
 notice appears and the Updates section offers a Download button that opens the release page. Windows uses WinHTTP,
-Linux `curl` (or `wget`), and Android the platform's HTTP client, which needs the `INTERNET` permission.
+Linux `curl` (or `wget`, with a single try), read without stdio locks so a slow network never delays closing the game,
+and Android the platform's HTTP client, which needs the `INTERNET` permission.
 
 ## Icons
 
@@ -57,6 +58,16 @@ glyphs in use: `assets/fonts/icons-brands.ttf` (Discord, GitHub, YouTube) and `a
 used for Ko-fi, which has no Font Awesome logo, and the notification icons). Their code points are in
 `port/overlay/Icons.h`. They are merged into the menu font at startup; the license is in
 `assets/fonts/LICENSE-FontAwesome.txt`.
+
+## Scrolling
+
+On touch screens the menu applies a touch slop, as Android and iOS do: a touch is not handed to the controls right
+away. If the finger then moves vertically by more than about 10 points, the gesture is a scroll and the controls never
+see the touch, so no button activates and no slider moves. If it moves horizontally first (on a slider) or lifts
+without moving (a tap), the held touch is delivered to the control as is. A touch that starts on the scrollbar goes
+straight to it, so the bar can still be dragged. Releasing a scroll with speed keeps the
+content moving with inertia. With a mouse, dragging anywhere on the content also scrolls, and a slider that jumps on
+press gets its previous value back when the drag turns into a scroll.
 
 ## Layout
 
@@ -85,7 +96,7 @@ font only has the digits, `.`, `/`, `:`, `m` and `s` used by the HUD.
 | `controls.camera_sensitivity` | `0.3` to `3` |
 | `controls.invert_y` | `1` / `0` |
 | `controls.deadzone` | `0.05` to `0.5` |
-| `controls.accelerometer` | `1` / `0` (experimental, off by default) |
+| `controls.touch` | `modern` (default), `classic`, `accelerometer` |
 | `controls.tilt_sensitivity` | `0.4` to `2.5` |
 | `controls.tilt_invert_x`, `controls.tilt_invert_y` | `1` / `0` |
 | `controls.tilt_camera` | `follow`, `fixed` |
@@ -107,3 +118,9 @@ To add a language:
 
 Languages can also be tested without rebuilding by placing the file in `~/.config/redbound/lang/` together with a
 `languages` file. The current font covers Latin scripts.
+
+## Size
+
+On touch devices (Android, and later Switch and Vita) the menu is compact, with text about 2.9 mm tall so more
+options fit. On desktop the text is larger (about 3.8 mm, or 22 px per 720 px of height scaled by 0.85, whichever is
+bigger), and the compact layout is used only for small windows (under 480 px high or 7 inches diagonal).

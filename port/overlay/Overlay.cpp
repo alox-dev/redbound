@@ -6,6 +6,7 @@
 #include "I18n.h"
 #include <dirent.h>
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl2.h"
 #include <cstdarg>
@@ -35,6 +36,8 @@
 namespace redbound {
 static bool mergeIconFont(const char* relative, const ImWchar* ranges, float size);
 static std::string format(const char* fmt, ...);
+static std::string g_pressedSlider, g_restoreSlider;
+static float g_pressedValue = 0.f;
 }
 
 namespace redbound {
@@ -114,12 +117,16 @@ bool Overlay::init(SDL_Window* win, SDL_GLContext ctx) {
 	int dw, dh;
 	SDL_GL_GetDrawableSize(win, &dw, &dh);
 	const float pxPerMm = ddpi / 25.4f * (w > 0 ? (float)dw / w : 1.f);
-	float fontPx = std::max(3.4f * pxPerMm, 22.f * (dh > 0 ? dh / 720.f : 1.f) * 0.8f);
-	m_scale = fontPx / 22.f;
-	const bool touch = SDL_GetNumTouchDevices() > 0;
+#if defined(__ANDROID__) || defined(__SWITCH__) || defined(__vita__)
+	const bool touch = true;
+#else
+	const bool touch = false;
+#endif
+	const float heightScale = dh > 0 ? dh / 720.f : 1.f;
+	float fontPx = touch ? std::max(2.9f * pxPerMm, 16.f * heightScale) : std::max(3.8f * pxPerMm, 22.f * heightScale * 0.85f);
 	const float diagonalIn = std::sqrt((float)dw * dw + (float)dh * dh) / (pxPerMm * 25.4f);
-	m_compact = touch || diagonalIn < 9.f || getenv("REDBOUND_MENU_COMPACT");
-	if (m_compact) fontPx = std::max(fontPx, 18.f);
+	m_compact = touch || diagonalIn < 7.f || dh < 480 || getenv("REDBOUND_MENU_COMPACT");
+	if (m_compact) fontPx = std::max(fontPx, 16.f);
 	m_scale = fontPx / 22.f;
 	const std::string font = findFont();
 	if (!font.empty()) io.Fonts->AddFontFromFileTTF(font.c_str(), fontPx, 0, io.Fonts->GetGlyphRangesDefault());
@@ -176,6 +183,83 @@ void Overlay::shutdown() {
 	m_ready = false;
 }
 
+bool Overlay::handleTouchSlop(const SDL_Event& e) {
+	const bool down = e.type == SDL_MOUSEBUTTONDOWN && e.button.which == SDL_TOUCH_MOUSEID && e.button.button == SDL_BUTTON_LEFT;
+	const bool up = e.type == SDL_MOUSEBUTTONUP && e.button.which == SDL_TOUCH_MOUSEID && e.button.button == SDL_BUTTON_LEFT;
+	const bool motion = e.type == SDL_MOUSEMOTION && e.motion.which == SDL_TOUCH_MOUSEID;
+	if (!down && !up && !motion) return false;
+	auto forward = [&](const SDL_Event& event) {
+		SDL_Event copy = event;
+		ImGui_ImplSDL2_ProcessEvent(&copy);
+	};
+	auto moveTo = [&](int x, int y) {
+		SDL_Event m;
+		memset(&m, 0, sizeof(m));
+		m.type = SDL_MOUSEMOTION;
+		m.motion.windowID = e.button.windowID;
+		m.motion.which = SDL_TOUCH_MOUSEID;
+		m.motion.x = x;
+		m.motion.y = y;
+		forward(m);
+	};
+	if (down) {
+		const float scrollbar = ImGui::GetStyle().ScrollbarSize * 1.5f;
+		if (m_contentW > 0.f && e.button.x >= m_contentX + m_contentW - scrollbar && e.button.x <= m_contentX + m_contentW &&
+		    e.button.y >= m_contentY && e.button.y <= m_contentY + m_contentH) {
+			m_touchState = TouchState::Passthrough;
+			moveTo(e.button.x, e.button.y);
+			return false;
+		}
+		m_touchState = TouchState::Pending;
+		m_heldDown = e;
+		m_touchStartX = m_touchLastX = e.button.x;
+		m_touchStartY = m_touchLastY = e.button.y;
+		m_touchLastTime = e.button.timestamp;
+		m_scrollVelocity = 0.f;
+		moveTo(e.button.x, e.button.y);
+		return true;
+	}
+	if (motion) {
+		const int x = e.motion.x, y = e.motion.y;
+		if (m_touchState == TouchState::Pending) {
+			const float slop = 10.f * m_scale;
+			const float dx = (float)(x - m_touchStartX), dy = (float)(y - m_touchStartY);
+			if (std::fabs(dy) > slop && std::fabs(dy) >= std::fabs(dx)) {
+				m_touchState = TouchState::Scrolling;
+			} else if (std::fabs(dx) > slop) {
+				m_touchState = TouchState::Passthrough;
+				forward(m_heldDown);
+				return false;
+			} else {
+				return true;
+			}
+		}
+		if (m_touchState == TouchState::Scrolling) {
+			const float delta = (float)(m_touchLastY - y);
+			m_pendingScroll += delta;
+			const Uint32 elapsed = e.motion.timestamp - m_touchLastTime;
+			if (elapsed > 0) m_scrollVelocity = m_scrollVelocity * 0.5f + delta / (elapsed / 1000.f) * 0.5f;
+			m_touchLastX = x;
+			m_touchLastY = y;
+			m_touchLastTime = e.motion.timestamp;
+			return true;
+		}
+		return false;
+	}
+	if (m_touchState == TouchState::Pending) {
+		forward(m_heldDown);
+		m_touchState = TouchState::Idle;
+		return false;
+	}
+	if (m_touchState == TouchState::Scrolling) {
+		if (e.button.timestamp - m_touchLastTime > 120) m_scrollVelocity = 0.f;
+		m_touchState = TouchState::Idle;
+		return true;
+	}
+	m_touchState = TouchState::Idle;
+	return false;
+}
+
 bool Overlay::processEvent(const SDL_Event& e) {
 	if (!m_ready) return false;
 	bool toggle = false;
@@ -197,6 +281,7 @@ bool Overlay::processEvent(const SDL_Event& e) {
 	}
 #endif
 	if (!m_open) return false;
+	if (handleTouchSlop(e)) return true;
 	ImGui_ImplSDL2_ProcessEvent(&e);
 	switch (e.type) {
 	case SDL_QUIT: case SDL_WINDOWEVENT: return false;
@@ -299,14 +384,6 @@ void Overlay::drawNotices() {
 
 void Overlay::draw() {
 	if (!m_ready) return;
-	if (!m_welcomed) {
-		m_welcomed = true;
-#ifdef __ANDROID__
-		notify(format(tr("notice.welcome_touch"), REDBOUND_VERSION), icon::info, 5.f);
-#else
-		notify(format(tr("notice.welcome_desktop"), REDBOUND_VERSION), icon::info, 5.f);
-#endif
-	}
 	if (!m_updateNotified && updateState() == UpdateState::Available) {
 		m_updateNotified = true;
 		notify(format(tr("notice.update_available"), latestVersion().c_str()), icon::update, 7.f);
@@ -328,6 +405,48 @@ void Overlay::draw() {
 	}
 }
 
+void Overlay::dragScroll() {
+	const ImVec2 pos = ImGui::GetWindowPos(), size = ImGui::GetWindowSize();
+	m_contentX = pos.x;
+	m_contentY = pos.y;
+	m_contentW = ImGui::GetScrollMaxY() > 0.f ? size.x : 0.f;
+	m_contentH = size.y;
+	if (m_pendingScroll != 0.f) {
+		ImGui::SetScrollY(ImGui::GetScrollY() + m_pendingScroll);
+		m_pendingScroll = 0.f;
+	}
+	const ImGuiIO& io = ImGui::GetIO();
+	const bool hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+	if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+		const bool onScrollbar = m_contentW > 0.f && io.MousePos.x >= m_contentX + m_contentW - ImGui::GetStyle().ScrollbarSize * 1.5f;
+		m_scrollCandidate = hovered && !onScrollbar && io.MouseSource != ImGuiMouseSource_TouchScreen;
+		m_scrollDragging = false;
+		if (hovered) m_scrollVelocity = 0.f;
+	}
+	if (m_scrollCandidate && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+		const ImVec2 total = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left, 0.f);
+		if (!m_scrollDragging && std::fabs(total.y) > 10.f * m_scale && std::fabs(total.y) > std::fabs(total.x)) {
+			m_scrollDragging = true;
+			if (!g_pressedSlider.empty()) g_restoreSlider = g_pressedSlider;
+		}
+		if (m_scrollDragging) {
+			ImGui::SetScrollY(ImGui::GetScrollY() - io.MouseDelta.y);
+			if (io.DeltaTime > 0.f) m_scrollVelocity = m_scrollVelocity * 0.6f + (-io.MouseDelta.y / io.DeltaTime) * 0.4f;
+			ImGui::ClearActiveID();
+		}
+	}
+	if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+		g_pressedSlider.clear();
+		if (!m_scrollDragging) m_scrollVelocity = 0.f;
+		m_scrollCandidate = m_scrollDragging = false;
+	}
+	if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) && std::fabs(m_scrollVelocity) > 5.f) {
+		ImGui::SetScrollY(ImGui::GetScrollY() + m_scrollVelocity * io.DeltaTime);
+		m_scrollVelocity *= expf(-io.DeltaTime * 4.f);
+		if (ImGui::GetScrollY() <= 0.f || ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) m_scrollVelocity = 0.f;
+	}
+}
+
 void Overlay::drawMenu() {
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplSDL2_NewFrame();
@@ -343,8 +462,7 @@ void Overlay::drawMenu() {
 	auto content = [&](const std::function<void()>& body) {
 		ImGui::BeginChild("content", ImVec2(0, -footer), ImGuiChildFlags_None);
 		body();
-		if (ImGui::IsWindowHovered() && ImGui::IsMouseDragging(ImGuiMouseButton_Left) && !ImGui::IsAnyItemActive())
-			ImGui::SetScrollY(ImGui::GetScrollY() - io.MouseDelta.y);
+		dragScroll();
 		ImGui::EndChild();
 	};
 	auto tab = [](const char* key, const char* id) { return std::string(tr(key)) + "###" + id; };
@@ -434,10 +552,26 @@ static bool checkRow(const char* label, const char* key, bool fallback) {
 
 static bool sliderRow(const char* label, const char* key, float fallback, float lo, float hi, const char* fmt) {
 	Config& c = Config::get();
-	float v = c.num(key, fallback);
+	if (g_restoreSlider == key) {
+		g_restoreSlider.clear();
+		c.setNum(key, g_pressedValue);
+		c.save();
+		row(label);
+		float v = g_pressedValue;
+		ImGui::PushID(key);
+		ImGui::SliderFloat("##v", &v, lo, hi, fmt);
+		ImGui::PopID();
+		return true;
+	}
+	const float before = c.num(key, fallback);
+	float v = before;
 	row(label);
 	ImGui::PushID(key);
 	const bool changed = ImGui::SliderFloat("##v", &v, lo, hi, fmt);
+	if (ImGui::IsItemActivated()) {
+		g_pressedSlider = key;
+		g_pressedValue = before;
+	}
 	ImGui::PopID();
 	if (changed) {
 		c.setNum(key, v);
@@ -742,8 +876,21 @@ void Overlay::drawControls() {
 #endif
 	section(tr("controls.section_touch"));
 	if (beginRows("touch")) {
-		checkRow(tr("controls.accelerometer"), "controls.accelerometer", false);
-		if (c.flag("controls.accelerometer", false)) {
+		const std::string scheme = c.str("controls.touch", "modern");
+		const char* keys[] = { "modern", "classic", "accelerometer" };
+		const char* labels[] = { tr("controls.touch_modern"), tr("controls.touch_classic"), tr("controls.touch_accelerometer") };
+		int current = 0;
+		for (int i = 0; i < 3; ++i) if (scheme == keys[i]) current = i;
+		row(tr("controls.touch"));
+		if (ImGui::BeginCombo("##touch", labels[current])) {
+			for (int i = 0; i < 3; ++i)
+				if (ImGui::Selectable(labels[i], i == current)) {
+					c.set("controls.touch", keys[i]);
+					c.save();
+				}
+			ImGui::EndCombo();
+		}
+		if (scheme == "accelerometer") {
 			sliderRow(tr("controls.tilt_sensitivity"), "controls.tilt_sensitivity", 1.f, 0.4f, 2.5f, "%.1f");
 			checkRow(tr("controls.tilt_invert_x"), "controls.tilt_invert_x", false);
 			checkRow(tr("controls.tilt_invert_y"), "controls.tilt_invert_y", false);
@@ -784,9 +931,20 @@ void Overlay::drawGraphics() {
 	}
 	section(tr("graphics.section_performance"));
 	if (beginRows("performance")) {
-		int percent = (int)(c.num("graphics.render_scale", 1.f) * 100.f + 0.5f);
+		if (g_restoreSlider == "graphics.render_scale") {
+			g_restoreSlider.clear();
+			c.setNum("graphics.render_scale", g_pressedValue);
+			c.save();
+		}
+		const float scaleBefore = c.num("graphics.render_scale", 1.f);
+		int percent = (int)(scaleBefore * 100.f + 0.5f);
 		row(tr("graphics.render_scale"));
-		if (ImGui::SliderInt("##render_scale", &percent, 50, 100, "%d%%")) {
+		const bool scaleChanged = ImGui::SliderInt("##render_scale", &percent, 50, 100, "%d%%");
+		if (ImGui::IsItemActivated()) {
+			g_pressedSlider = "graphics.render_scale";
+			g_pressedValue = scaleBefore;
+		}
+		if (scaleChanged) {
 			c.setNum("graphics.render_scale", percent / 100.f);
 			c.save();
 		}

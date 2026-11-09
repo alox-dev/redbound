@@ -46,6 +46,17 @@ private:
 	bool m_screenshotRequested = false;
 	bool m_confirmClear = false;
 	void drawMenu();
+	void dragScroll();
+	bool handleTouchSlop(const SDL_Event& e);
+	enum class TouchState { Idle, Pending, Scrolling, Passthrough };
+	TouchState m_touchState = TouchState::Idle;
+	SDL_Event m_heldDown{};
+	int m_touchStartX = 0, m_touchStartY = 0, m_touchLastX = 0, m_touchLastY = 0;
+	Uint32 m_touchLastTime = 0;
+	float m_pendingScroll = 0.f;
+	float m_contentX = 0.f, m_contentY = 0.f, m_contentW = 0.f, m_contentH = 0.f;
+	bool m_scrollCandidate = false, m_scrollDragging = false;
+	float m_scrollVelocity = 0.f;
 	void drawLabels();
 	void drawNotices();
 	struct Notice {
@@ -55,7 +66,6 @@ private:
 	std::vector<Notice> m_notices;
 	Uint32 m_lastNoticeTicks = 0;
 	bool m_updateNotified = false;
-	bool m_welcomed = false;
 	struct Label {
 		std::string text;
 		float rightPx = 0.f, centerYPx = 0.f, heightPx = 0.f;

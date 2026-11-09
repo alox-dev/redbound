@@ -46,7 +46,8 @@ int SceneWorld::triggerState(const std::string& name) const {
 
 hgr::Node* SceneWorld::node(const std::string& name) const {
 	std::map<std::string, P(hgr::Node)>::const_iterator it = m_nodes.find(name);
-	return it == m_nodes.end() ? 0 : (hgr::Node*)it->second;
+	if (it != m_nodes.end()) return (hgr::Node*)it->second;
+	return m_scene ? m_scene->findNodeByName(name.c_str()) : 0;
 }
 
 float SceneWorld::getVariable(const std::string& name) const {
@@ -117,10 +118,26 @@ void SceneWorld::unlink(const std::vector<std::string>& nodes) {
 
 int SceneWorld::playAnimation(const std::string& nodeName, const std::string& anim, float start, float end, bool loop) {
 	hgr::Node* n = node(nodeName);
-	hgr::TransformAnimationSet* set = m_scene->transformAnimations();
-	if (!n || !set) return -1;
-	P(hgr::TransformAnimation)* a = set->containsKey(anim.c_str()) ? &set->get(anim.c_str()) : 0;
-	if (!a || !*a) return -1;
+	if (!n) {
+		if (m_unhandled.insert("no animation node " + nodeName).second) printf("[world] animation: node '%s' does not exist\n", nodeName.c_str());
+		return -1;
+	}
+	std::vector<hgr::TransformAnimationSet*> sets(1, m_scene->transformAnimations());
+	sets.insert(sets.end(), m_animationSets.begin(), m_animationSets.end());
+	P(hgr::TransformAnimation)* a = 0;
+	bool fromModel = false;
+	for (const std::string& name : { anim, nodeName })
+		for (size_t s = 0; s < sets.size(); ++s)
+			if (!a && sets[s] && sets[s]->containsKey(name.c_str()) && sets[s]->get(name.c_str())) {
+				a = &sets[s]->get(name.c_str());
+				fromModel = s > 0;
+			}
+	if (!a) {
+		if (m_unhandled.insert("no animation " + anim + "/" + nodeName).second)
+			printf("[world] animation '%s' for node '%s' not found\n", anim.c_str(), nodeName.c_str());
+		return -1;
+	}
+	if (getenv("REDBOUND_TRACE")) printf("[trace] animation '%s' on '%s' from %.2f to %.2f s\n", anim.c_str(), nodeName.c_str(), start, end);
 	Playing p;
 	p.node = n;
 	p.anim = *a;
@@ -129,6 +146,10 @@ int SceneWorld::playAnimation(const std::string& nodeName, const std::string& an
 	p.time = start;
 	p.loop = loop;
 	p.done = false;
+	if (fromModel) {
+		p.from = n->transform();
+		p.blend = 0.12f;
+	}
 	const int id = m_nextAnim++;
 	m_playing[id] = p;
 	return id;
@@ -243,6 +264,13 @@ bool SceneWorld::genericAction(const std::string& name, const std::vector<std::s
 		m_levelComplete = true;
 		return true;
 	}
+	if (name == "setguidingobject" && !args.empty()) {
+		BallRequest r;
+		r.kind = BallRequest::SET_GUIDE;
+		r.name = args[0];
+		m_ballRequests.push_back(r);
+		return true;
+	}
 	if (name == "attachtorail" && args.size() >= 2) {
 		BallRequest r;
 		r.kind = args[0] == "0" ? BallRequest::DETACH_RAIL : BallRequest::ATTACH_RAIL;
@@ -315,6 +343,13 @@ void SceneWorld::update(float dt) {
 				else { p.time = p.end; p.done = true; }
 			}
 			p.anim->eval(p.time, &tm);
+			if (p.blend > 0.f && p.blendElapsed < p.blend) {
+				p.blendElapsed += dt;
+				float t = std::min(1.f, p.blendElapsed / p.blend);
+				t = t * t * (3.f - 2.f * t);
+				for (int r = 0; r < 3; ++r)
+					for (int c = 0; c < 4; ++c) tm(r, c) = p.from(r, c) + (tm(r, c) - p.from(r, c)) * t;
+			}
 			p.node->setTransform(tm);
 		}
 		if (p.done && p.time > p.end + 10.f) it = m_playing.erase(it);

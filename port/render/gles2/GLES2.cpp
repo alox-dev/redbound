@@ -663,6 +663,11 @@ void GLES2_Shader::applyStates(const GLES2_PassProgram& p) {
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_POLYGON_OFFSET_FILL);
 		glPolygonOffset(-4.f, -64.f);
+	} else if (m_name == "rail_boost" || m_name == "boost_glow") {
+		glEnable(GL_DEPTH_TEST);
+		glEnable(GL_POLYGON_OFFSET_FILL);
+		if (m_name == "rail_boost") glPolygonOffset(-1.f, -8.f);
+		else glPolygonOffset(-2.f, -16.f);
 	} else {
 		glEnable(GL_DEPTH_TEST);
 		glDisable(GL_POLYGON_OFFSET_FILL);

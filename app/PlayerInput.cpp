@@ -17,7 +17,10 @@ PlayerInput::Device PlayerInput::takeDeviceChange() {
 	return m_reported;
 }
 
-std::string PlayerInput::touchScheme() { return Config::get().flag("controls.accelerometer", false) ? "accelerometer" : "gestures"; }
+std::string PlayerInput::touchScheme() {
+	const std::string scheme = Config::get().str("controls.touch", "modern");
+	return scheme == "classic" || scheme == "accelerometer" ? scheme : "modern";
+}
 
 void PlayerInput::registerTap(const Finger& f, float x, float y, int width, int height) {
 	const float moved = std::hypot((x - f.startX) * width, (y - f.startY) * height);
@@ -49,10 +52,13 @@ void PlayerInput::resetTouch() {
 }
 
 void PlayerInput::handleTouch(const SDL_Event& e, int width, int height) {
-	if (touchScheme() != "gestures") return;
+	const std::string scheme = touchScheme();
+	if (scheme == "accelerometer") return;
 	if (e.type == SDL_FINGERDOWN) {
 		if (e.tfinger.x < 0.12f && e.tfinger.y < 0.15f) return;
-		Finger* f = !m_move.active ? &m_move : !m_look.active ? &m_look : nullptr;
+		Finger* f = nullptr;
+		if (scheme == "modern") f = e.tfinger.x < 0.5f ? (!m_move.active ? &m_move : nullptr) : (!m_look.active ? &m_look : nullptr);
+		else f = !m_move.active ? &m_move : !m_look.active ? &m_look : nullptr;
 		if (!f) return;
 		f->active = true;
 		f->swiping = false;
@@ -87,7 +93,7 @@ void PlayerInput::handleTouch(const SDL_Event& e, int width, int height) {
 				m_flickX = dx / moved;
 				m_flickY = -dy / moved;
 			}
-			if (m_look.active) {
+			if (m_look.active && touchScheme() == "classic") {
 				m_move = m_look;
 				m_move.startX = m_move.x;
 				m_move.startY = m_move.y;
@@ -111,21 +117,33 @@ void PlayerInput::readTilt(float dt, float& tiltX, float& tiltY) {
 	Devices& devices = Devices::instance();
 	float a[3];
 	if (!devices.accelerometer() || SDL_SensorGetData(devices.accelerometer(), a, 3) != 0) return;
-	for (int c = 0; c < 3; ++c) m_gravity[c] = m_gravity[c] * 0.85f + a[c] * 0.15f;
-	if (!m_hasNeutral || devices.recalibrationRequested()) {
-		if (m_gravity[0] * m_gravity[0] + m_gravity[1] * m_gravity[1] + m_gravity[2] * m_gravity[2] > 25.f) {
-			for (int c = 0; c < 3; ++c) m_neutral[c] = m_gravity[c];
-			m_hasNeutral = true;
-			devices.clearRecalibration();
-		}
+	if (!m_gravityReady) {
+		for (int c = 0; c < 3; ++c) m_gravity[c] = a[c];
+		m_gravityReady = true;
 	}
+	for (int c = 0; c < 3; ++c) m_gravity[c] = m_gravity[c] * 0.85f + a[c] * 0.15f;
+	const float length = std::sqrt(m_gravity[0] * m_gravity[0] + m_gravity[1] * m_gravity[1] + m_gravity[2] * m_gravity[2]);
+	if (length < 5.f) return;
+	float n[3];
+	for (int c = 0; c < 3; ++c) n[c] = m_gravity[c] / length;
 	const float sign = SDL_GetDisplayOrientation(0) == SDL_ORIENTATION_LANDSCAPE_FLIPPED ? -1.f : 1.f;
-	auto right = [&](const float* v) { return -sign * v[1]; };
-	auto up = [&](const float* v) { return sign * v[0]; };
+	const float roll = atan2f(-sign * n[1], n[2]);
+	const float pitch = atan2f(sign * n[0], n[2]);
+	if (!m_hasNeutral || devices.recalibrationRequested()) {
+		m_neutralRoll = roll;
+		m_neutralPitch = pitch;
+		m_hasNeutral = true;
+		devices.clearRecalibration();
+	}
+	auto angle = [](float a) {
+		while (a > 3.14159265f) a -= 6.2831853f;
+		while (a < -3.14159265f) a += 6.2831853f;
+		return a;
+	};
 	Config& cfg = Config::get();
-	const float g = 9.81f, sensitivity = cfg.num("controls.tilt_sensitivity", 1.f) / 0.34f;
-	float tx = -(right(m_gravity) - right(m_neutral)) / g * sensitivity;
-	float ty = -(up(m_gravity) - up(m_neutral)) / g * sensitivity;
+	const float sensitivity = cfg.num("controls.tilt_sensitivity", 1.f) / 0.35f;
+	float tx = -angle(roll - m_neutralRoll) * sensitivity;
+	float ty = -angle(pitch - m_neutralPitch) * sensitivity;
 	if (cfg.flag("controls.tilt_invert_x", false)) tx = -tx;
 	if (cfg.flag("controls.tilt_invert_y", false)) ty = -ty;
 	tx = clampUnit(tx);
@@ -133,10 +151,10 @@ void PlayerInput::readTilt(float dt, float& tiltX, float& tiltY) {
 	if (std::fabs(tx) > 0.14f) tiltX = (tx - (tx > 0.f ? 0.14f : -0.14f)) / 0.86f;
 	if (std::fabs(ty) > 0.08f) tiltY = (ty - (ty > 0.f ? 0.08f : -0.08f)) / 0.92f;
 	m_shakeCooldown = std::max(0.f, m_shakeCooldown - dt);
-	const float magnitude = std::sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
-	if (m_shakeCooldown <= 0.f && std::fabs(magnitude - g) > 7.f) {
+	const float jx = a[0] - m_gravity[0], jy = a[1] - m_gravity[1], jz = a[2] - m_gravity[2];
+	if (m_shakeCooldown <= 0.f && std::sqrt(jx * jx + jy * jy + jz * jz) > 12.f) {
 		m_jumpFrames = 6;
-		m_shakeCooldown = 0.5f;
+		m_shakeCooldown = 0.7f;
 	}
 }
 
@@ -196,7 +214,8 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 		for (int b = 0; b < std::min(2, SDL_JoystickNumButtons(js)); ++b)
 			if (SDL_JoystickGetButton(js, b)) jump = true;
 	}
-	if (touchScheme() != "gestures") resetTouch();
+	const std::string scheme = touchScheme();
+	if (scheme == "accelerometer") resetTouch();
 	if (SDL_GetNumTouchDevices() > 0) {
 		if (m_move.active && !fingerStillDown(m_move.id)) m_move.active = false;
 		if (m_look.active && !fingerStillDown(m_look.id)) m_look.active = false;
@@ -205,27 +224,36 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 	bool touchActive = m_look.active;
 	if (m_move.active) {
 		touchActive = true;
-		if (m_move.swiping) {
-			const float radius = height * 0.08f;
-			touchX = clampUnit((m_move.x - m_move.startX) * width / radius);
-			touchY = clampUnit(-(m_move.y - m_move.startY) * height / radius);
-			if (std::fabs(touchX) < 0.12f) touchX = 0.f;
-			if (std::fabs(touchY) < 0.12f) touchY = 0.f;
-		} else if (SDL_GetTicks() - m_move.restTime > 200) {
+		if (m_move.swiping || scheme == "modern") {
+			const float radius = height * (scheme == "modern" ? 0.14f : 0.08f);
+			touchX = (m_move.x - m_move.startX) * width / radius;
+			touchY = -(m_move.y - m_move.startY) * height / radius;
+			const float magnitude = std::sqrt(touchX * touchX + touchY * touchY);
+			const float deadzone = scheme == "modern" ? 0.08f : 0.12f;
+			if (magnitude < deadzone) {
+				touchX = touchY = 0.f;
+			} else {
+				float response = std::min(1.f, (magnitude - deadzone) / (1.f - deadzone));
+				if (scheme == "modern") response = std::pow(response, 1.6f);
+				touchX *= response / magnitude;
+				touchY *= response / magnitude;
+			}
+		} else if (scheme == "classic" && SDL_GetTicks() - m_move.restTime > 200) {
 			holdTarget = m_move.restX > 0.5f ? 1.f : -1.f;
 			m_lastLookTime = SDL_GetTicks();
 		}
 	}
 	m_holdYawSpeed += (holdTarget * 1.8f - m_holdYawSpeed) * std::min(1.f, dt * 10.f);
 	if (holdTarget == 0.f && std::fabs(m_holdYawSpeed) < 0.01f) m_holdYawSpeed = 0.f;
+	if (scheme != "modern") m_lookPendingX = m_lookPendingY = 0.f;
 	const float lookBlend = std::min(1.f, dt * 18.f);
 	const float lookX = m_lookPendingX * lookBlend, lookY = m_lookPendingY * lookBlend;
 	m_lookPendingX -= lookX;
 	m_lookPendingY -= lookY;
 	const float lookSensitivity = cfg.num("controls.camera_sensitivity", 1.f);
 	const float aspect = height > 0 ? (float)width / (float)height : 1.f;
-	const float lookYaw = (lookX * 3.14159265f + m_holdYawSpeed * dt) * lookSensitivity;
-	const float lookPitch = lookY * 1.6f / std::max(1.f, aspect * 0.5f) * lookSensitivity * (cfg.flag("controls.invert_y", false) ? -1.f : 1.f);
+	const float lookYaw = (lookX * 3.14159265f * 2.5f + m_holdYawSpeed * dt) * lookSensitivity;
+	const float lookPitch = lookY * 2.4f / std::max(1.f, aspect * 0.5f) * lookSensitivity * (cfg.flag("controls.invert_y", false) ? -1.f : 1.f);
 	if (m_flickTime > 0.f) {
 		m_flickTime -= dt;
 		touchX = m_flickX;
@@ -285,7 +313,7 @@ PlayerCommand PlayerInput::update(float dt, int width, int height, bool controll
 	cmd.jump = jump;
 	cmd.modern = m_modern;
 	cmd.followPath = tilt && cfg.str("controls.tilt_camera", "follow") == "follow";
-	cmd.autoFollow = m_move.active && m_move.swiping && SDL_GetTicks() - m_lastLookTime > 1000;
+	cmd.autoFollow = scheme == "modern" && m_move.active && SDL_GetTicks() - m_lastLookTime > 1000;
 	return cmd;
 }
 

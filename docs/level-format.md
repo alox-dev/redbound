@@ -85,3 +85,15 @@ handled by `port/game/SceneWorld.cpp` and `BallController`. *Parsed* actions are
 | `updateballvalues`, `resetballvalues` | | ball parameters from variables / from `D_forminfo` | world |
 | `setballdirection`, `setcamprops` | | | parsed |
 | others (`addimpulse`, `changeball`, `setgravity`, `showtext`, minigames...) | | unused by these levels | parsed |
+
+## Fades
+
+`fade,<seconds>,<in>,<color>` fades the screen over the given time: `<in>` is 1 to fade in (from the color to the
+scene) and 0 to fade out (from the scene to the color). Color 0 is white, which level 1 uses everywhere: the cuts of
+the attraction demo and drowning (`T_ultimatedeath`: fade out, `levelfailed`, fade in). Any other color is black.
+
+## Random values and variable delays
+
+`random,<variable>,<min>,<max>` stores a random value between `min` and `max` in a variable, and `delay` accepts a
+variable name as well as a number. The ball model uses both for blinking: `random,bounceBlinkDelay,0.05,2` followed
+by `delay,bounceBlinkDelay`.

@@ -49,8 +49,9 @@ private:
 	float m_flickTime = 0.f, m_flickX = 0.f, m_flickY = 0.f;
 	float m_orbitX = 0.f, m_orbitY = 0.f;
 	float m_gravity[3] = { 0, 0, 0 };
-	float m_neutral[3] = { 0, 0, 0 };
+	float m_neutralRoll = 0.f, m_neutralPitch = 0.f;
 	bool m_hasNeutral = false;
+	bool m_gravityReady = false;
 	float m_shakeCooldown = 0.f;
 	bool m_wasControllable = false;
 	bool m_modern = false;

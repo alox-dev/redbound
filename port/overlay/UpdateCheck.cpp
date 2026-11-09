@@ -6,6 +6,9 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 #ifdef _WIN32
 #include <windows.h>
 #include <winhttp.h>
@@ -45,13 +48,13 @@ static std::string resolveLatestUrl() {
 	return androidResolveUrl(kLatestPage);
 #else
 	const std::string command = std::string("curl -sSIL -o /dev/null -w '%{url_effective}' --max-time 6 '") + kLatestPage +
-	                            "' 2>/dev/null || wget -q --spider --server-response --timeout=6 '" + kLatestPage +
+	                            "' 2>/dev/null || wget -q --spider --server-response --timeout=6 --tries=1 '" + kLatestPage +
 	                            "' 2>&1 | sed -n 's/^ *[Ll]ocation: *//p' | tail -n 1";
 	std::string result;
 	if (FILE* p = popen(command.c_str(), "r")) {
 		char buffer[1024];
-		size_t n;
-		while ((n = fread(buffer, 1, sizeof(buffer), p)) > 0 && result.size() < 4096) result.append(buffer, n);
+		ssize_t n;
+		while ((n = read(fileno(p), buffer, sizeof(buffer))) > 0 && result.size() < 4096) result.append(buffer, (size_t)n);
 		pclose(p);
 	}
 	while (!result.empty() && (result.back() == '\n' || result.back() == '\r' || result.back() == ' ')) result.pop_back();

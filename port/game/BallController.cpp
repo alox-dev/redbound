@@ -65,6 +65,9 @@ void BallController::buildCollision() {
 		meta.group = atoi(prop(props, "group").c_str());
 		meta.executeTrigger = prop(props, "executetrigger");
 		meta.solid = (meta.group & 0x400) == 0;
+		std::string lower = name;
+		for (char& ch : lower) ch = (char)tolower((unsigned char)ch);
+		meta.cameraPassThrough = lower.compare(0, 4, "wall") == 0 || lower.compare(0, 6, "ground") == 0 || !meta.executeTrigger.empty();
 		const int id = m_world.addMesh(meta);
 		hgr::Mesh* mesh = static_cast<hgr::Mesh*>(n);
 		const math::float3x4 w = n->worldTransform();
@@ -431,16 +434,23 @@ void BallController::checkVolumes() {
 
 void BallController::loadRails() {
 	m_rails.clear();
+	m_guides.clear();
+	m_guide = -1;
 	hgr::UserPropertySet* ups = m_scene->userProperties();
 	for (hgr::Node* n = m_scene->firstChild(); n; n = n->next(m_scene)) {
 		const std::string name = n->name().c_str();
 		if (name.compare(0, 2, "L_") != 0) continue;
 		hgr::Node* track = 0;
 		hgr::Node* normal = 0;
+		hgr::Node* camPos = 0;
+		hgr::Node* camLook = 0;
 		for (hgr::Node* c = n->firstChild(); c; c = c->next(n)) {
 			if (c->parent() != n || c->classId() != hgr::Node::NODE_LINES) continue;
-			if (std::string(c->name().c_str()) == "track") track = c;
-			else if (std::string(c->name().c_str()) == "tracknormal") normal = c;
+			const std::string child = c->name().c_str();
+			if (child == "track") track = c;
+			else if (child == "tracknormal") normal = c;
+			else if (child == "cameraposition") camPos = c;
+			else if (child == "cameralookat") camLook = c;
 		}
 		if (!track) continue;
 		auto segments = [](hgr::Node* node) {
@@ -453,6 +463,17 @@ void BallController::loadRails() {
 			}
 			return segs;
 		};
+		if (camPos && camLook) {
+			Guide g;
+			g.name = name;
+			g.track.build(RailTrack::chain(segments(track)), std::vector<Vec3>());
+			g.position.build(RailTrack::chain(segments(camPos)), std::vector<Vec3>());
+			g.lookAt.build(RailTrack::chain(segments(camLook)), std::vector<Vec3>());
+			if (g.track.valid() && g.position.valid() && g.lookAt.valid()) {
+				m_guides.push_back(g);
+				printf("camera guide %s: track %.0f, camera path %.0f, look path %.0f\n", name.c_str(), g.track.length(), g.position.length(), g.lookAt.length());
+			}
+		}
 		Rail r;
 		r.name = name;
 		std::vector<size_t> breaks;
@@ -485,6 +506,16 @@ void BallController::processRequests() {
 		case SceneWorld::BallRequest::ATTACH_RAIL: {
 			const int i = findRail(r.name);
 			if (i >= 0) { m_rail = i; m_railS = m_rails[i].track.closest(m_ball.position).s; }
+			break;
+		}
+		case SceneWorld::BallRequest::SET_GUIDE: {
+			m_guide = -1;
+			for (size_t i = 0; i < m_guides.size(); ++i)
+				if (m_guides[i].name == r.name) {
+					m_guide = (int)i;
+					m_guideS = m_guides[i].track.closest(m_ball.position).s;
+				}
+			printf("camera guide: %s\n", m_guide >= 0 ? (r.name + " active").c_str() : ("off (" + r.name + ")").c_str());
 			break;
 		}
 		case SceneWorld::BallRequest::DETACH_RAIL:
@@ -614,7 +645,7 @@ void BallController::update(float dt, float forward, float turn, bool jump) {
 	}
 	if (m_modern) {
 		m_camYaw += m_dCamYaw;
-		m_camPitch = std::max(-0.35f, std::min(1.2f, m_camPitch + m_dCamPitch));
+		m_camPitch = std::max(-0.6f, std::min(1.2f, m_camPitch + m_dCamPitch));
 		if (m_followPath && !m_cinematic && m_rail < 0) {
 			const Vec3 hv(m_ball.velocity.x, 0.f, m_ball.velocity.z);
 			const float sp = hv.length();
@@ -808,17 +839,95 @@ void BallController::updateChaseCamera(hgr::Camera* cam, float dt) {
 	const float r = m_ball.params.radius;
 	Vec3 target = m_ball.position + Vec3(0, r * 0.5f, 0);
 	Vec3 desired = m_ball.position - m_heading * (r * 12.f) + Vec3(0, r * 8.f, 0);
-	if (m_modern) {
+	const bool guided = m_useGuide && m_guide >= 0 && m_rail < 0;
+	if (guided) {
+		const Guide& g = m_guides[m_guide];
+		const RailSample s = g.track.closestNear(m_ball.position, m_guideS, g.track.length() * 0.1f, g.track.length() * 0.1f);
+		m_guideS = s.s;
+		const float fraction = g.track.length() > 0.f ? s.s / g.track.length() : 0.f;
+		const Vec3 guidePos = g.position.at(fraction * g.position.length()).pos;
+		const Vec3 guideLook = g.lookAt.at(fraction * g.lookAt.length()).pos;
+		const Vec3 view = guideLook - guidePos;
+		const float flat = Vec3(view.x, 0.f, view.z).length();
+		if (flat > 1e-3f) {
+			float d = atan2f(view.x, view.z) - m_camYaw;
+			while (d > 3.14159265f) d -= 6.2831853f;
+			while (d < -3.14159265f) d += 6.2831853f;
+			m_camYaw += d * std::min(1.f, dt * 3.f);
+			const float guidePitch = std::max(0.15f, std::min(0.75f, atan2f(-view.y, flat)));
+			m_camPitch += (guidePitch - m_camPitch) * std::min(1.f, dt * 3.f);
+		}
 		const float dist = r * 14.4f;
-		const float minElevation = 0.12f;
-		const float elevation = std::max(minElevation, m_camPitch);
-		const Vec3 back(-sinf(m_camYaw) * cosf(elevation), sinf(elevation), -cosf(m_camYaw) * cosf(elevation));
+		const Vec3 back(-sinf(m_camYaw) * cosf(m_camPitch), sinf(m_camPitch), -cosf(m_camYaw) * cosf(m_camPitch));
 		desired = m_ball.position + back * dist;
-		target = target + Vec3(0.f, (minElevation - std::min(minElevation, m_camPitch)) * dist * 1.5f, 0.f);
+	} else if (m_modern) {
+		const float low = 0.15f;
+		float dist = r * 14.4f;
+		if (m_camPitch < low) {
+			float t = std::min(1.f, (low - m_camPitch) / 0.75f);
+			t = t * t * (3.f - 2.f * t);
+			dist *= 1.f - 0.6f * t;
+		}
+		const Vec3 back(-sinf(m_camYaw) * cosf(m_camPitch), sinf(m_camPitch), -cosf(m_camYaw) * cosf(m_camPitch));
+		desired = m_ball.position + back * dist;
+		target = target + Vec3(0.f, (low - std::min(low, m_camPitch)) * r * 2.f, 0.f);
+	}
+	bool blocked = false;
+	{
+		float clear = 0.f;
+		const Vec3 toCamera = desired - target;
+		const float length = toCamera.length();
+		if (length > r) {
+			const Vec3 dir = toCamera * (1.f / length);
+			Vec3 side(dir.z, 0.f, -dir.x);
+			side = side.length() > 1e-3f ? side * (r * 1.2f / side.length()) : Vec3(r * 1.2f, 0.f, 0.f);
+			int hits = 0;
+			clear = length;
+			for (int i = -1; i <= 1; ++i) {
+				Vec3 hit, normal;
+				int owner = -1;
+				const Vec3 from = target + side * (float)i;
+				if (m_world.ray(from, dir, length + r * 0.5f, hit, normal, true, &owner) && std::fabs(normal.y) < 0.6f) {
+					++hits;
+					if (owner >= 0) m_cameraBlocker = m_world.mesh(owner).name;
+					clear = std::min(clear, std::max(r * 3.f, (hit - from).length() - r));
+				}
+			}
+			if (hits >= 2 && clear < length) {
+				desired = target + dir * clear;
+				blocked = true;
+				static const bool trace = getenv("REDBOUND_TRACE") != 0;
+				if (trace && m_cameraBlocker != m_lastCameraBlocker) {
+					printf("[trace] camera blocked by '%s'\n", m_cameraBlocker.c_str());
+					m_lastCameraBlocker = m_cameraBlocker;
+				}
+			}
+		}
+		auto groundBelow = [&](const Vec3& p, float& y) {
+			Vec3 n;
+			const float probeY = std::max(p.y, target.y) + r * 3.f;
+			return m_world.rayDown(Vec3(p.x, probeY, p.z), probeY - p.y + r * 20.f, y, n);
+		};
+		float groundY = 0.f;
+		if (groundBelow(desired, groundY) && desired.y < groundY + r * 0.8f) {
+			bool slid = false;
+			for (float t = 0.95f; t >= 0.35f && !slid; t -= 0.05f) {
+				const Vec3 p = target + (desired - target) * t;
+				float y = 0.f;
+				if (!groundBelow(p, y) || p.y >= y + r * 0.8f) {
+					desired = p;
+					slid = true;
+				}
+			}
+			if (!slid) desired.y = groundY + r * 0.8f;
+		}
 	}
 	if (!m_camInit) { m_camPos = desired; m_camLook = target; m_camInit = true; }
-	const float k = 1.f - expf(-dt * (m_modern ? 9.f : 3.f));
+	const float k = 1.f - expf(-dt * (blocked ? 14.f : guided || m_modern ? 9.f : 3.f));
 	m_camPos += (desired - m_camPos) * k;
+	float waterHeight = 0.f;
+	if (m_waterQuery && m_waterQuery(m_camPos.x, m_camPos.z, waterHeight) && m_camPos.y < waterHeight + r * 0.6f)
+		m_camPos.y = waterHeight + r * 0.6f;
 	m_camLook += (target - m_camLook) * (1.f - expf(-dt * 8.f));
 	cam->setPosition(math::float3(m_camPos.x, m_camPos.y, m_camPos.z));
 	cam->lookAt(math::float3(m_camLook.x, m_camLook.y, m_camLook.z));

@@ -68,3 +68,45 @@ working as before.
   the end, and the results show the distance and the top three records.
 - The rail camera sits behind and above Bounce (height 158, distance 465) and rolls with the track.
 - The sky (`skybox=1`) is drawn separately before the scene, unlit, at infinity and without writing depth.
+
+## Camera guides
+
+A level can define camera guides: `L_` nodes with three line children, `track`, `cameraposition` and
+`cameralookat` (level 1 has `L_bmmbh`). The action `setguidingobject,<node>` makes one the active guide; naming a node
+without camera lines (level 1 uses `O_guidingobject`) turns it off. While a guide is active and the touch scheme is the
+accelerometer, the camera finds Bounce's closest point on `track` (searching near the previous one, so loops and
+crossings do not jump), takes the same fraction of the length along `cameraposition` and `cameralookat`, and uses the
+direction from that camera point to that look point: its heading and its downward angle (clamped between 0.15 and
+0.75 rad), both eased at 3/s. The camera is then placed behind Bounce at the usual chase distance along that
+direction, so it keeps the original framing angles without sitting as far and high as the guide's own points.
+The other schemes keep the player controlled camera.
+
+## Camera collisions
+
+Every chase camera (player controlled or guided) checks the line from Bounce to its desired position with three
+parallel rays through the solid collision meshes (center, and 1.2 ball radii to each side). Only an obstacle that
+blocks at least two of them counts, so thin things such as tree trunks do not move the camera. Only steep surfaces
+(walls, the sides of rocks and buildings) count: a surface facing up or down (ground, slopes, a ledge Bounce stands
+on) never pulls the camera in, so when the camera is below Bounce it keeps its distance, as in modern third person
+games. When an obstacle does count, the camera moves in front of it (keeping at least 3 ball radii) with a quick but
+smooth transition.
+
+The player controlled camera orbits freely, also below Bounce (down to 0.6 rad under the horizon) to look up; as it
+goes below 0.15 rad it moves in smoothly, up to 60 % closer, as in modern open world games. The ground is not treated
+as an obstacle: terrain meshes (`ground*`) are left out of those rays, and when the ground under the desired position
+is too close, the camera slides toward Bounce along its line of sight until it is clear (hugging the terrain), and
+only rises if no point of that line is clear. This keeps it outside the
+island when Bounce is at the shore, and makes it stop smoothly over the ground when pulled down. Also ignored are the
+invisible boundary walls (`wall*`) and the meshes that only exist to fire a trigger (with `executetrigger`, such as
+`watercollision`). Water is not a collision mesh, so the water surfaces found by the reflection (their height and
+extent) are checked too: the camera never goes below a water surface, also after Bounce falls in.
+
+## Eye animations
+
+The ball model (`resources/models/bounce.hgr`) has its own triggers for the eyes: `T_bounce_lookat_eyes_anim01`
+waits a random time (`random,bounceBlinkDelay,0.05,2`) and plays the eyeball and pupil animations frame range by frame
+range, which is the blink, and `T_bounce_lookat_eyes_anim02` loops the eyebrows. They are added to the level's trigger
+world when the ball loads and started right away; the eye look-at itself is done by the port. Nodes added to the scene
+after the world was created, such as the ball's, are looked up in the scene when they are not in the world's index.
+Animations that come from the ball model blend from the node's current pose over 0.12 s, so the randomly chosen
+pupil animations never snap; level animations, such as cutscene cameras, still start exactly on their first frame.
