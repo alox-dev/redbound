@@ -1,5 +1,5 @@
 .fvec totalMtx[4], worldMtx[4]
-.fvec lightPos, diffuseColor, ambientColor, fogRange, fogColor, texScale
+.fvec lightPos, diffuseColor, ambientColor, fogRange, fogColor, texScale, uvSwap
 
 .constf consts(0.0, 1.0, 0.5, 2.0)
 .alias zeros consts.xxxx
@@ -50,7 +50,11 @@
 	mul outColor.xyz, r7, inColor
 	mov outColor.w, inColor.w
 
-	mul outTexCoord0, texScale.xyxy, inTexCoord0
+	mul r8, texScale.xyxy, inTexCoord0
+	mov r10, uvSwap
+	mul r9, r10.xxxx, r8
+	mad r9, r8.yxzw, r10.yyyy, r9
+	mov outTexCoord0, r9
 	mul outTexCoord1, texScale.zwzw, inTexCoord1
 	end
 .end

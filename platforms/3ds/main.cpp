@@ -93,6 +93,10 @@ int main() {
 	gr::Citro3D_Context* ctx = new gr::Citro3D_Context(TOP_WIDTH, TOP_HEIGHT);
 	ctx->setMaxTextureSize(isNew3DS ? 256 : 128);
 	ctx->invertCulling = true;
+	ctx->lightmapMode = 1;
+	const std::string cacheDir = userDataDir() + "/cache";
+	makeDirectories(cacheDir);
+	if (isDirectory(cacheDir)) ctx->setCacheDir(cacheDir);
 	ctx->setShaderDir(options.shaderDir());
 	ctx->setTextureDir(options.textureDir());
 	try {
@@ -134,22 +138,26 @@ int main() {
 			camera->linkTo(scene);
 			useFreeCamera = true;
 		}
-		camera->setHorizontalFov(1.2f);
-		camera->setFront(10.f);
-		camera->setBack(20000.f);
+		if (cameras.empty()) {
+			camera->setHorizontalFov(1.2f);
+			camera->setFront(10.f);
+			camera->setBack(20000.f);
+		}
 		freeCamera.position = camera->position();
 	}
 
 	const unsigned clearColor = scene ? backgroundColor(scene) : 0xFF6688AAu;
 	printf("level: %s\n", scene ? "loaded" : "FAILED");
-	printf("load time: %.2f s\n", loadSeconds);
-	printf("textures: %d ok, %d failed\n", ctx->texturesLoaded, ctx->texturesFailed);
+	printf("load: %.1f s = tex %.1f + fx %.1f + prim %.1f\n", loadSeconds, (float)ctx->textureTicks / SYSCLOCK_ARM11,
+	       (float)ctx->shaderTicks / SYSCLOCK_ARM11, (float)ctx->primitiveTicks / SYSCLOCK_ARM11);
+	printf("primitives: %d\n", ctx->primitiveCount);
+	printf("textures: %d ok, %d failed, %d cached\n", ctx->texturesLoaded, ctx->texturesFailed, ctx->texturesCached);
 	printf("effects: %d ok, %d fallback\n", ctx->effectsLoaded, ctx->effectsFallback);
 	printf("texture memory: %u KB\n", (unsigned)(ctx->textureBytes / 1024));
 	printf("linear used by level: %u KB\n", (unsigned)((linearBefore - freeLinear()) / 1024));
 	printf("cameras: %d\n", (int)cameras.size());
 	printf("report: %s\n", ctx->writeReport(userDataDir() + "/probe-log.txt") ? "written" : "FAILED");
-	printf("\nPad move, C-Stick look, X/B updown\nL/R camera, Y free camera\nA cull, SELECT flip, dUP mode\ndDOWN alpha, dLEFT/dRIGHT meshes\n(hold L for steps of 25), R camera\nSTART exits\n\n");
+	printf("\nPad move, C-Stick look, X/B updown\nL/R camera, Y free camera\nA cull, SELECT swap UV, dUP mode\ndDOWN lightmap, dLEFT/dRIGHT meshes\n(hold L for steps of 25), R camera\nSTART exits\n\n");
 
 	int debugMode = 0;
 	int meshLimit = 0;
@@ -163,21 +171,18 @@ int main() {
 		if (down & KEY_START) break;
 		if (down & KEY_A) ctx->invertCulling = !ctx->invertCulling;
 		if (down & KEY_DUP) debugMode = (debugMode + 1) % 4;
-		if (down & KEY_DDOWN) ctx->disableAlphaTest = !ctx->disableAlphaTest;
+		if (down & KEY_DDOWN) ctx->lightmapMode = (ctx->lightmapMode + 1) % 3;
 		const u32 held = hidKeysHeld();
 		const int step = (held & KEY_L) ? 25 : 1;
 		if ((down & KEY_DLEFT) || ((held & KEY_DLEFT) && (frames & 3) == 0)) meshLimit = std::max(0, meshLimit - step);
 		if ((down & KEY_DRIGHT) || ((held & KEY_DRIGHT) && (frames & 3) == 0)) meshLimit += step;
 		ctx->debugMode = debugMode;
 		ctx->meshLimit = meshLimit;
-		if (down & KEY_SELECT) ctx->flipTextures = !ctx->flipTextures;
+		if (down & KEY_SELECT) ctx->swapUV = !ctx->swapUV;
 		if (down & KEY_Y) useFreeCamera = !useFreeCamera;
 		if ((down & KEY_R) && !cameras.empty()) {
 			cameraIndex = (cameraIndex + 1) % (int)cameras.size();
 			camera = cameras[cameraIndex];
-			camera->setHorizontalFov(1.2f);
-			camera->setFront(10.f);
-			camera->setBack(20000.f);
 		}
 
 		const u64 now = svcGetSystemTick();
@@ -205,12 +210,14 @@ int main() {
 		const float cpuTime = C3D_GetProcessingTime();
 		fpsAverage += 1.f / std::max(0.0001f, dt);
 		if (++frames >= 30) {
+			static const char* const LIGHTMAP[] = { "mul2", "add ", "off " };
 			static const char* const MODES[] = { "normal", "untextured", "no lighting", "lightmap only" };
-			printf("\x1b[s\x1b[23;0Hfps %5.1f  cpu %4.1fms  gpu %4.1fms\nlinear %5u KB  vram %5u KB  cam %d\ncull %s  tex %s  alpha %s   \nmode %-14s meshes %d/%d    \nvtx %d tex %d lm %d water %d      \x1b[u",
+			printf("\x1b[s\x1b[23;0Hfps %5.1f  cpu %4.1fms  gpu %4.1fms\nlinear %5u KB  vram %5u KB  cam %d\ncull %s  uv %s  lmap %s   \nmode %-14s meshes %d/%d    \nvtx %d tex %d lm %d water %d      \n%-38s\x1b[u",
 			       fpsAverage / frames, cpuTime, gpuTime, (unsigned)(freeLinear() / 1024), (unsigned)(vramSpaceFree() / 1024),
-			       cameraIndex, ctx->invertCulling ? "inv" : "nrm", ctx->flipTextures ? "flip" : "nrm ",
-			       ctx->disableAlphaTest ? "off" : "on ", MODES[debugMode], meshLimit, ctx->meshesDrawn,
-			       ctx->combinerUse[0], ctx->combinerUse[1], ctx->combinerUse[2], ctx->combinerUse[3]);
+			       cameraIndex, ctx->invertCulling ? "inv" : "nrm", ctx->swapUV ? "swap" : "nrm ",
+			       LIGHTMAP[ctx->lightmapMode], MODES[debugMode], meshLimit, ctx->meshesDrawn,
+			       ctx->combinerUse[0], ctx->combinerUse[1], ctx->combinerUse[2], ctx->combinerUse[3],
+			       meshLimit > 0 ? ctx->isolatedMaterial : "");
 			fpsAverage = 0.f;
 			frames = 0;
 		}

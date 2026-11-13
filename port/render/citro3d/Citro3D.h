@@ -1,6 +1,7 @@
 #pragma once
 #include "EffectParser.h"
 #include "PassRecipe.h"
+#include "TextureTiling.h"
 #include <gr/Context.h>
 #include <gr/CubeTexture.h>
 #include <gr/Palette.h>
@@ -51,6 +52,9 @@ private:
 	size_t m_bytes;
 
 	void createChecker();
+	void applyFilters();
+	bool loadFromCache(Citro3D_Context* ctx, const std::string& path);
+	void saveToCache(const std::string& path, redbound::TexelFormat format, int levels) const;
 };
 
 class Citro3D_CubeTexture : public CubeTexture {
@@ -80,6 +84,7 @@ public:
 	std::vector<std::string> report;
 	bool fallback;
 
+	bool unlit() const;
 	bool isWater() const;
 	int findTechnique(const std::string& n) const;
 };
@@ -136,6 +141,7 @@ private:
 	redbound::PassCombiner resolveSamplers(const redbound::PassRecipe& r, std::string& base, std::string& lightmap) const;
 	void applyStates(const redbound::PassRecipe& r);
 	void applyCombiner(redbound::PassCombiner combiner);
+	void applyLightmapStages(C3D_TexEnv* first, C3D_TexEnv* second);
 	void applyUniforms(const redbound::PassRecipe& r, redbound::PassCombiner combiner, const std::string& base, const std::string& lightmap);
 };
 
@@ -180,6 +186,8 @@ public:
 	void setTextureDir(const std::string& d) { m_textureDir = d; }
 	void setPlatformId(int id) { m_platformId = id; }
 	void setMaxTextureSize(int size) { m_maxTextureSize = size; }
+	void setCacheDir(const std::string& d) { m_cacheDir = d; }
+	const std::string& cacheDir() const { return m_cacheDir; }
 	int maxTextureSize() const { return m_maxTextureSize; }
 
 	Shader* createShader(const lang::String& name, int flags = 0);
@@ -217,17 +225,22 @@ public:
 
 	float time;
 	math::float4 fogRange, fogColor;
-	int texturesLoaded, texturesFailed, effectsLoaded, effectsFallback;
+	int texturesLoaded, texturesFailed, effectsLoaded, effectsFallback, texturesCached;
 	size_t textureBytes;
+	uint64_t textureTicks, shaderTicks, primitiveTicks;
+	int primitiveCount;
 	std::set<std::string> warnedSamplers;
 	bool mirrored;
 	bool flipTextures;
 	bool invertCulling;
 	bool disableAlphaTest;
 	int debugMode;
+	int lightmapMode;
 	int meshLimit;
 	int meshesDrawn;
 	int combinerUse[4];
+	bool swapUV;
+	char isolatedMaterial[40];
 	std::string forcedTechnique;
 	P(Texture) reflectionTexture;
 	P(Texture) waterNormal;
@@ -236,7 +249,7 @@ private:
 	int m_width, m_height, m_platformId, m_maxTextureSize;
 	Rect m_viewport;
 	math::float4x4 m_proj;
-	std::string m_shaderDir, m_textureDir;
+	std::string m_shaderDir, m_textureDir, m_cacheDir;
 	std::map<std::string, P(Citro3D_Effect)> m_effects;
 	P(Citro3D_Effect) m_fallback;
 	std::set<std::string> m_missingEffects;
