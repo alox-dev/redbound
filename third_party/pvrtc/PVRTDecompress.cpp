@@ -564,8 +564,8 @@ uint32_t PVRTDecompressPVRTC(const void* pCompressedData, uint32_t Do2bitMode, u
 	Pixel32* pDecompressedData = (Pixel32*)pResultImage;
 
 	// Check the X and Y values are at least the minimum size.
-	uint32_t XTrueDim = std::max(XDim, ((Do2bitMode == 1u) ? 16u : 8u));
-	uint32_t YTrueDim = std::max(YDim, 8u);
+	uint32_t XTrueDim = std::max<uint32_t>(XDim, ((Do2bitMode == 1u) ? 16u : 8u));
+	uint32_t YTrueDim = std::max<uint32_t>(YDim, 8u);
 
 	// If the dimensions aren't correct, we need to create a new buffer instead of just using the provided one, as the buffer will overrun otherwise.
 	if (XTrueDim != XDim || YTrueDim != YDim) { pDecompressedData = new Pixel32[XTrueDim * YTrueDim]; }

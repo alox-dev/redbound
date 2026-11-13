@@ -90,7 +90,13 @@ void LevelSession::loadScene() {
 	printf("level loaded in %u ms | textures: %d ok, %d failed | effects: %d ok, %d fallback\n", SDL_GetTicks() - start,
 	       m_ctx->texturesLoaded, m_ctx->texturesFailed, m_ctx->effectsLoaded, m_ctx->effectsFallback);
 	loadLibraryObjects(m_scene, m_ctx, m_resources, m_options, m_libraryObjects);
-	applyFog(m_scene, m_ctx);
+	float fogStart = 0.f, fogEnd = 0.f, fogColor[3] = { 0.f, 0.f, 0.f };
+	if (linearFog(m_scene, fogStart, fogEnd, fogColor)) {
+		m_ctx->fogRange = math::float4(fogStart, fogEnd, 1.f / (fogEnd - fogStart), 0.f);
+		m_ctx->fogColor = math::float4(fogColor[0], fogColor[1], fogColor[2], 1.f);
+	} else {
+		m_ctx->fogRange = math::float4(0, 0, 0, 0);
+	}
 	m_helpers = hideHelperNodes(m_scene);
 	m_cameras = collectCameras(m_scene);
 	m_clearColor = backgroundColor(m_scene);

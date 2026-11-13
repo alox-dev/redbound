@@ -1,0 +1,22 @@
+add_library(redbound_citro3d_core STATIC PassRecipe.cpp TextureTiling.cpp)
+target_include_directories(redbound_citro3d_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+set_target_properties(redbound_citro3d_core PROPERTIES CXX_STANDARD 17 CXX_EXTENSIONS OFF)
+target_compile_options(redbound_citro3d_core PRIVATE -Wall -Wextra)
+
+if(NINTENDO_3DS)
+  ctr_add_shader_library(redbound_scene_shader OUTPUT scene.shbin scene.v.pica)
+  dkp_add_embedded_binary_library(redbound_scene_shbin redbound_scene_shader)
+
+  add_library(redbound_citro3d STATIC Citro3D.cpp ${PROJECT_SOURCE_DIR}/port/render/gles2/EffectParser.cpp)
+  target_include_directories(redbound_citro3d PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/port/render/gles2)
+  set_target_properties(redbound_citro3d PROPERTIES CXX_STANDARD 17 CXX_EXTENSIONS ON)
+  target_compile_options(redbound_citro3d PRIVATE -fpermissive)
+  target_link_libraries(redbound_citro3d PUBLIC redbound_citro3d_core redbound_image ka3d_core citro3d PRIVATE redbound_scene_shbin)
+endif()
+
+if(REDBOUND_TOOLS)
+  add_executable(test_citro3d_core tests/test_citro3d_core.cpp)
+  set_target_properties(test_citro3d_core PROPERTIES CXX_STANDARD 17)
+  target_link_libraries(test_citro3d_core redbound_citro3d_core)
+  add_test(NAME citro3d_core COMMAND test_citro3d_core)
+endif()

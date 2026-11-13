@@ -1,6 +1,5 @@
 #include "SceneSetup.h"
 #include "FileUtils.h"
-#include "GLES2.h"
 #include "LaunchOptions.h"
 #include <gr/Primitive.h>
 #include <gr/Shader.h>
@@ -171,14 +170,15 @@ std::vector<hgr::Camera*> collectCameras(hgr::Node* root) {
 	return cameras;
 }
 
-void applyFog(hgr::Scene* scene, gr::GLES2_Context* ctx) {
-	if (scene->fogType() == hgr::Scene::FOG_LINEAR && scene->fogEnd() > scene->fogStart()) {
-		ctx->fogRange = math::float4(scene->fogStart(), scene->fogEnd(), 1.f / (scene->fogEnd() - scene->fogStart()), 0.f);
-		ctx->fogColor = math::float4(scene->fogColor().x, scene->fogColor().y, scene->fogColor().z, 1.f);
-		printf("fog: linear from %g to %g\n", scene->fogStart(), scene->fogEnd());
-	} else {
-		ctx->fogRange = math::float4(0, 0, 0, 0);
-	}
+bool linearFog(hgr::Scene* scene, float& start, float& end, float color[3]) {
+	if (scene->fogType() != hgr::Scene::FOG_LINEAR || scene->fogEnd() <= scene->fogStart()) return false;
+	start = scene->fogStart();
+	end = scene->fogEnd();
+	color[0] = scene->fogColor().x;
+	color[1] = scene->fogColor().y;
+	color[2] = scene->fogColor().z;
+	printf("fog: linear from %g to %g\n", start, end);
+	return true;
 }
 
 unsigned backgroundColor(hgr::Scene* scene) {

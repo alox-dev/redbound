@@ -1,0 +1,56 @@
+.fvec totalMtx[4], worldMtx[4]
+.fvec lightPos, diffuseColor, ambientColor, fogRange, fogColor, texScale
+
+.constf consts(0.0, 1.0, 0.5, 2.0)
+.alias zeros consts.xxxx
+.alias ones consts.yyyy
+
+.out outPosition position
+.out outTexCoord0 texcoord0
+.out outTexCoord1 texcoord1
+.out outColor color
+
+.alias inPosition v0
+.alias inTexCoord0 v1
+.alias inTexCoord1 v2
+.alias inNormal v3
+.alias inColor v4
+
+.proc main
+	mov r0.xyz, inPosition
+	mov r0.w, ones
+
+	dp4 outPosition.x, totalMtx[0], r0
+	dp4 outPosition.y, totalMtx[1], r0
+	dp4 outPosition.z, totalMtx[2], r0
+	dp4 outPosition.w, totalMtx[3], r0
+
+	dp4 r1.x, worldMtx[0], r0
+	dp4 r1.y, worldMtx[1], r0
+	dp4 r1.z, worldMtx[2], r0
+
+	dp3 r2.x, worldMtx[0], inNormal
+	dp3 r2.y, worldMtx[1], inNormal
+	dp3 r2.z, worldMtx[2], inNormal
+	mov r2.w, zeros
+	dp3 r3.x, r2, r2
+	rsq r3.x, r3.x
+	mul r2, r3.xxxx, r2
+
+	add r4, lightPos, -r1
+	dp3 r5.x, r4, r4
+	rsq r5.x, r5.x
+	mul r4, r5.xxxx, r4
+
+	dp3 r6.x, r2, r4
+	max r6.x, zeros, r6.x
+	mul r7, diffuseColor, r6.xxxx
+	add r7, ambientColor, r7
+	min r7, ones, r7
+	mul outColor.xyz, r7, inColor
+	mov outColor.w, inColor.w
+
+	mul outTexCoord0, texScale.xyxy, inTexCoord0
+	mul outTexCoord1, texScale.zwzw, inTexCoord1
+	end
+.end

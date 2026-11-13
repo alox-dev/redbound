@@ -31,7 +31,9 @@ static std::string fromEnv(const char* name) {
 }
 
 std::string userDataDir() {
-#ifdef _WIN32
+#if defined(__3DS__)
+	return "sdmc:/3ds/redbound";
+#elif defined(_WIN32)
 	const std::string appData = fromEnv("APPDATA");
 	return (appData.empty() ? std::string(".") : appData) + "/redbound";
 #else
@@ -42,7 +44,7 @@ std::string userDataDir() {
 }
 
 std::string userConfigDir() {
-#ifdef _WIN32
+#if defined(__3DS__) || defined(_WIN32)
 	return userDataDir();
 #else
 	const std::string xdg = fromEnv("XDG_CONFIG_HOME");
@@ -52,7 +54,9 @@ std::string userConfigDir() {
 }
 
 std::string picturesDir() {
-#ifdef _WIN32
+#if defined(__3DS__)
+	return userDataDir() + "/screenshots";
+#elif defined(_WIN32)
 	const std::string profile = fromEnv("USERPROFILE");
 	return (profile.empty() ? userDataDir() : profile + "\\Pictures") + "\\Redbound";
 #else
