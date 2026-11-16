@@ -73,7 +73,7 @@ struct FreeCamera {
 	}
 };
 
-enum MenuItem { MENU_CAMERA, MENU_VIEW, MENU_LIGHTMAP, MENU_PASSES, MENU_REFLECTION, MENU_CULLING, MENU_SWAP_UV, MENU_MESHES, MENU_SPEED, MENU_COUNT };
+enum MenuItem { MENU_CAMERA, MENU_VIEW, MENU_LIGHTMAP, MENU_PASSES, MENU_REFLECTION, MENU_WATER, MENU_CULLING, MENU_SWAP_UV, MENU_MESHES, MENU_SPEED, MENU_COUNT };
 
 struct KeyRepeat {
 	float held = 0.f, next = 0.f;
@@ -314,6 +314,7 @@ int main() {
 	P(gr::Texture) reflectionTarget;
 	std::unique_ptr<SceneWorld> world;
 	std::vector<std::pair<P(hgr::ParticleSystem), float> > spawned;
+	std::vector<P(gr::Texture)> waterFrames;
 	P(hgr::Camera) freeView;
 	FreeCamera freeCamera;
 	int cameraIndex = -1;
@@ -374,6 +375,14 @@ int main() {
 			mirror->setName("water_mirror");
 			mirror->linkTo(scene);
 			reflectionTarget = ctx->createTexture(128, 256, gr::SurfaceFormat(gr::SurfaceFormat::SURFACE_A8R8G8B8), 0, 0);
+			for (int i = 1; i <= 30; ++i) {
+				char name[32];
+				snprintf(name, sizeof(name), "water%02d.pvr", i);
+				const int failed = ctx->texturesFailed;
+				P(gr::Texture) frame = ctx->createTexture(name);
+				if (ctx->texturesFailed != failed) break;
+				waterFrames.push_back(frame);
+			}
 		}
 	}
 
@@ -454,6 +463,7 @@ int main() {
 				break;
 			case MENU_PASSES: ctx->passFilter = cycle(ctx->passFilter, 3); break;
 			case MENU_REFLECTION: reflectionEnabled = !reflectionEnabled; break;
+			case MENU_WATER: ctx->waterRipples = !ctx->waterRipples; break;
 			case MENU_CULLING: ctx->invertCulling = !ctx->invertCulling; break;
 			case MENU_SWAP_UV: ctx->swapUV = !ctx->swapUV; break;
 			case MENU_MESHES: meshLimit = std::max(0, meshLimit + change * amount); break;
@@ -463,6 +473,7 @@ int main() {
 		ctx->meshLimit = meshLimit;
 
 		if (world) world->update(dt);
+		ctx->waterNormal = waterFrames.empty() ? 0 : waterFrames[(size_t)(fmodf(ctx->time, 2.f) * 15.f) % waterFrames.size()];
 		int particleSystems = 0;
 		for (hgr::Node* n = scene->firstChild(); n; n = n->next(scene))
 			if (n->classId() == hgr::Node::NODE_PARTICLESYSTEM) {
@@ -524,6 +535,7 @@ int main() {
 				case MENU_LIGHTMAP: snprintf(value, sizeof(value), "%s", LIGHTMAP_NAMES[lightmapChoice]); break;
 				case MENU_PASSES: snprintf(value, sizeof(value), "%s", PASS_NAMES[ctx->passFilter]); break;
 				case MENU_REFLECTION: snprintf(value, sizeof(value), "%s", reflectionEnabled ? "on" : "off"); break;
+				case MENU_WATER: snprintf(value, sizeof(value), "%s (%d frames)", ctx->waterRipples ? "ripples" : "still", (int)waterFrames.size()); break;
 				case MENU_CULLING: snprintf(value, sizeof(value), "%s", ctx->invertCulling ? "inverted" : "normal"); break;
 				case MENU_SWAP_UV: snprintf(value, sizeof(value), "%s", ctx->swapUV ? "on" : "off"); break;
 				case MENU_MESHES:
@@ -532,7 +544,7 @@ int main() {
 					break;
 				case MENU_SPEED: snprintf(value, sizeof(value), "%s", SPEED_NAMES[speedChoice]); break;
 				}
-				static const char* const LABELS[] = { "Camera", "View", "Lightmap", "Passes", "Reflection", "Culling", "Swap UV", "Meshes", "Speed" };
+				static const char* const LABELS[] = { "Camera", "View", "Lightmap", "Passes", "Reflection", "Water", "Culling", "Swap UV", "Meshes", "Speed" };
 				line(13 + i, "%c %-11s %s", i == menu ? '>' : ' ', LABELS[i], value);
 			}
 			line(26, "Pad move, C-Stick look, L/R down/up");
@@ -547,6 +559,8 @@ int main() {
 	gr::citro3dShuttingDown = true;
 	world.reset();
 	spawned.clear();
+	ctx->waterNormal = 0;
+	waterFrames.clear();
 	ctx->reflectionTexture = 0;
 	reflectionTarget = 0;
 	mirror = 0;

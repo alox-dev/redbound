@@ -259,6 +259,7 @@ public:
 	std::string forcedTechnique;
 	P(Texture) reflectionTexture;
 	int passFilter;
+	bool waterRipples;
 	P(Texture) waterNormal;
 
 private:

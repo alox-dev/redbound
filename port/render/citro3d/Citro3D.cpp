@@ -328,7 +328,7 @@ Citro3D_Context::Citro3D_Context(int width, int height) :
 	texturesLoaded(0), texturesFailed(0), effectsLoaded(0), effectsFallback(0), texturesCached(0), textureBytes(0), textureTicks(0), shaderTicks(0), primitiveTicks(0), primitiveCount(0),
 	mirrored(false), flipTextures(false), invertCulling(false), disableAlphaTest(false),
 	debugMode(0), lightmapMode(0), meshLimit(0), meshesDrawn(0), combinerUse{ 0, 0, 0, 0 }, swapUV(false), isolatedMaterial{ 0 },
-	passFilter(0),
+	passFilter(0), waterRipples(true),
 	m_width(width), m_height(height), m_platformId(5), m_maxTextureSize(512),
 	m_viewport(0, 0, width, height), m_proj(1.f), m_target(0), m_targetWidth(width), m_targetHeight(height),
 	m_screenTarget(0), m_screenWidth(width), m_screenHeight(height)
@@ -835,11 +835,18 @@ void Citro3D_Shader::applyWaterStages(C3D_TexEnv* first, C3D_TexEnv* second) {
 	C3D_TexEnvSrc(first, C3D_Alpha, GPU_CONSTANT, GPU_CONSTANT, GPU_CONSTANT);
 	C3D_TexEnvFunc(first, C3D_Alpha, GPU_REPLACE);
 	C3D_TexEnvColor(first, color);
-	C3D_TexEnvSrc(second, C3D_RGB, GPU_PREVIOUS, GPU_CONSTANT, GPU_PRIMARY_COLOR);
-	C3D_TexEnvFunc(second, C3D_RGB, GPU_ADD);
-	C3D_TexEnvSrc(second, C3D_Alpha, GPU_PREVIOUS, GPU_PREVIOUS, GPU_PREVIOUS);
-	C3D_TexEnvFunc(second, C3D_Alpha, GPU_REPLACE);
-	C3D_TexEnvColor(second, color);
+	if (m_ctx->waterRipples && m_ctx->waterNormal && m_ctx->debugMode != 1) {
+		C3D_TexEnvSrc(second, C3D_RGB, GPU_PREVIOUS, GPU_TEXTURE1, GPU_PRIMARY_COLOR);
+		C3D_TexEnvOpRgb(second, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_R, GPU_TEVOP_RGB_SRC_COLOR);
+		C3D_TexEnvFunc(second, C3D_RGB, GPU_MODULATE);
+		C3D_TexEnvScale(second, C3D_RGB, GPU_TEVSCALE_2);
+	}
+	C3D_TexEnv* third = C3D_GetTexEnv(2);
+	C3D_TexEnvSrc(third, C3D_RGB, GPU_PREVIOUS, GPU_CONSTANT, GPU_PRIMARY_COLOR);
+	C3D_TexEnvFunc(third, C3D_RGB, GPU_ADD);
+	C3D_TexEnvSrc(third, C3D_Alpha, GPU_PREVIOUS, GPU_PREVIOUS, GPU_PREVIOUS);
+	C3D_TexEnvFunc(third, C3D_Alpha, GPU_REPLACE);
+	C3D_TexEnvColor(third, color);
 }
 
 void Citro3D_Shader::applyLightmapStages(C3D_TexEnv* first, C3D_TexEnv* second) {
@@ -944,6 +951,8 @@ void Citro3D_Shader::applyUniforms(const redbound::PassRecipe& r, redbound::Pass
 			C3D_Tex* handle = refl && !m_ctx->renderingToTexture() ? refl->projectiveHandle() : 0;
 			if (!handle) handle = m_ctx->neutralTexture(units[i]);
 			if (handle) C3D_TexBind(i, handle);
+			Citro3D_Texture* ripples = dynamic_cast<Citro3D_Texture*>((Texture*)m_ctx->waterNormal);
+			if (m_ctx->waterRipples && ripples && ripples->handle()) C3D_TexBind(1, ripples->handle());
 			continue;
 		}
 		const auto v = m_values.find(units[i]);
