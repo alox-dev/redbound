@@ -70,7 +70,7 @@ WaterReflection::WaterReflection(gr::GLES2_Context* ctx, hgr::Scene* scene) : m_
 		m_normals.push_back(t);
 	}
 	m_mirror = new hgr::Camera;
-	m_mirror->setName("reflejo_agua");
+	m_mirror->setName("water_mirror");
 	m_mirror->linkTo(scene);
 }
 
@@ -106,7 +106,7 @@ void WaterReflection::update(hgr::Camera* camera, int width, int height, float t
 	std::string state;
 	if (!best) state = "no reflection: no water linked to the scene";
 	else if (camPos.y < best->height) state = "no reflection: camera below the water of " + std::string(best->node->name().c_str());
-	else state = "reflejando " + std::string(best->node->name().c_str());
+	else state = "reflecting " + std::string(best->node->name().c_str());
 	if (getenv("REDBOUND_TRACE") && state != lastState) {
 		printf("[trace] %s (t=%.1f s, camera y=%g, water y=%g)\n", state.c_str(), time, camPos.y, best ? best->height : 0.f);
 		lastState = state;
