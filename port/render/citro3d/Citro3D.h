@@ -243,6 +243,8 @@ public:
 	int texturesLoaded, texturesFailed, effectsLoaded, effectsFallback, texturesCached;
 	size_t textureBytes;
 	uint64_t textureTicks, shaderTicks, primitiveTicks;
+	uint64_t passTicks, uploadTicks, sortTicks, drawTicks;
+	int passCount;
 	int primitiveCount;
 	std::set<std::string> warnedSamplers;
 	bool mirrored;

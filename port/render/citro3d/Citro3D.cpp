@@ -325,7 +325,7 @@ bool Citro3D_Context::writeReport(const std::string& path) const {
 
 Citro3D_Context::Citro3D_Context(int width, int height) :
 	time(0.f), fogRange(1e6f, 2e6f, 1e-6f, 0.f), fogColor(0.5f, 0.6f, 0.7f, 1.f),
-	texturesLoaded(0), texturesFailed(0), effectsLoaded(0), effectsFallback(0), texturesCached(0), textureBytes(0), textureTicks(0), shaderTicks(0), primitiveTicks(0), primitiveCount(0),
+	texturesLoaded(0), texturesFailed(0), effectsLoaded(0), effectsFallback(0), texturesCached(0), textureBytes(0), textureTicks(0), shaderTicks(0), primitiveTicks(0), passTicks(0), uploadTicks(0), sortTicks(0), drawTicks(0), passCount(0), primitiveCount(0),
 	mirrored(false), flipTextures(false), invertCulling(false), disableAlphaTest(false),
 	debugMode(0), lightmapMode(0), meshLimit(0), meshesDrawn(0), combinerUse{ 0, 0, 0, 0 }, swapUV(false), isolatedMaterial{ 0 },
 	passFilter(0), waterRipples(true),
@@ -972,6 +972,8 @@ void Citro3D_Shader::applyUniforms(const redbound::PassRecipe& r, redbound::Pass
 }
 
 void Citro3D_Shader::beginPass(int pass) {
+	const u64 started = svcGetSystemTick();
+	++m_ctx->passCount;
 	const redbound::PassRecipe& r = m_fx->techniques[m_activeTechnique][pass];
 	m_recipe = &r;
 	std::string base, lightmap;
@@ -981,6 +983,7 @@ void Citro3D_Shader::beginPass(int pass) {
 	applyStates(r);
 	applyCombiner(combiner);
 	applyUniforms(r, combiner, base, lightmap);
+	m_ctx->passTicks += svcGetSystemTick() - started;
 }
 
 void Citro3D_Shader::endPass() { m_recipe = 0; }
@@ -1100,7 +1103,15 @@ void Citro3D_Primitive::sortTriangles() {
 }
 
 void Citro3D_Primitive::render() {
+	const u64 started = svcGetSystemTick();
 	if (m_dirty) upload();
+	const u64 uploaded = svcGetSystemTick();
+	m_ctx->uploadTicks += uploaded - started;
+	struct DrawTicks {
+		Citro3D_Context* ctx;
+		u64 started;
+		~DrawTicks() { ctx->drawTicks += svcGetSystemTick() - started; }
+	} drawTicks{ m_ctx, uploaded };
 	if (!m_vertices) return;
 	++m_ctx->meshesDrawn;
 	if (m_ctx->meshLimit > 0) {
@@ -1115,7 +1126,9 @@ void Citro3D_Primitive::render() {
 		const redbound::PassRecipe* r = fx ? fx->currentRecipe() : 0;
 		if (r && r->blend != (m_ctx->passFilter == 2)) return;
 	}
+	const u64 sortStart = svcGetSystemTick();
 	sortTriangles();
+	m_ctx->sortTicks += svcGetSystemTick() - sortStart;
 
 	C3D_BufInfo* buf = C3D_GetBufInfo();
 	BufInfo_Init(buf);

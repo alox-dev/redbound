@@ -13,54 +13,11 @@
 
 namespace redbound {
 
-static bool isWaterMesh(hgr::Node* n) {
-	if (n->classId() != hgr::Node::NODE_MESH) return false;
-	hgr::Mesh* m = static_cast<hgr::Mesh*>(n);
-	for (int i = 0; i < m->primitives(); ++i) {
-		gr::GLES2_Shader* fx = dynamic_cast<gr::GLES2_Shader*>(m->getPrimitive(i)->shader());
-		if (fx && fx->effect() && fx->effect()->isWater()) return true;
-	}
-	return false;
-}
-
-static bool surfaceHeight(hgr::Node* n, float& h, float* bounds) {
-	hgr::Mesh* m = static_cast<hgr::Mesh*>(n);
-	const math::float3x4 w = n->worldTransform();
-	double sum = 0;
-	long count = 0;
-	for (int i = 0; i < m->primitives(); ++i) {
-		gr::DIPrimitive* p = dynamic_cast<gr::DIPrimitive*>(m->getPrimitive(i));
-		if (!p || p->vertices() <= 0) continue;
-		std::vector<math::float4> pos(p->vertices());
-		p->lock(gr::ContextObject::LOCK_READ);
-		p->getVertexPositions(0, &pos[0], (int)pos.size());
-		p->unlock();
-		for (size_t k = 0; k < pos.size(); ++k) {
-			const math::float3 v = w.transform(math::float3(pos[k].x, pos[k].y, pos[k].z));
-			sum += v.y;
-			if (!count) {
-				bounds[0] = bounds[1] = v.x;
-				bounds[2] = bounds[3] = v.z;
-			}
-			bounds[0] = std::min(bounds[0], v.x);
-			bounds[1] = std::max(bounds[1], v.x);
-			bounds[2] = std::min(bounds[2], v.z);
-			bounds[3] = std::max(bounds[3], v.z);
-			++count;
-		}
-	}
-	if (!count) return false;
-	h = (float)(sum / count);
-	return true;
-}
-
 WaterReflection::WaterReflection(gr::GLES2_Context* ctx, hgr::Scene* scene) : m_ctx(ctx), m_scene(scene) {
-	for (hgr::Node* n = scene->firstChild(); n; n = n->next(scene)) {
-		if (!isWaterMesh(n)) continue;
-		Water w;
-		w.node = n;
-		if (surfaceHeight(n, w.height, w.bounds)) m_water.push_back(w);
-	}
+	m_surfaces.reset(new WaterSurfaces(scene, [](gr::Shader* shader) {
+		gr::GLES2_Shader* fx = dynamic_cast<gr::GLES2_Shader*>(shader);
+		return fx && fx->effect() && fx->effect()->isWater();
+	}));
 	for (int i = 1; i < 31; ++i) {
 		char name[32];
 		snprintf(name, sizeof(name), "water%02d.pvr", i);
@@ -74,34 +31,14 @@ WaterReflection::WaterReflection(gr::GLES2_Context* ctx, hgr::Scene* scene) : m_
 	m_mirror->linkTo(scene);
 }
 
-bool WaterReflection::surfaceAt(float x, float z, float& height) const {
-	bool found = false;
-	for (const Water& w : m_water)
-		if (x >= w.bounds[0] && x <= w.bounds[1] && z >= w.bounds[2] && z <= w.bounds[3] && (!found || w.height > height)) {
-			height = w.height;
-			found = true;
-		}
-	return found;
-}
-
 void WaterReflection::update(hgr::Camera* camera, int width, int height, float time, int clearColor) {
 	if (!m_normals.empty())
 		m_ctx->waterNormal = m_normals[(size_t)(fmodf(time, 2.f) * 15.f) % m_normals.size()];
-	if (!enabled || m_water.empty()) { m_ctx->reflectionTexture = 0; return; }
+	if (!enabled || m_surfaces->empty()) { m_ctx->reflectionTexture = 0; return; }
 
 	const math::float3x4 camTm = camera->worldTransform();
 	const math::float3 camPos = camTm.translation();
-	const Water* best = 0;
-	float bestD = 1e30f;
-	for (size_t i = 0; i < m_water.size(); ++i) {
-		hgr::Node* n = m_water[i].node;
-		bool linked = false;
-		for (hgr::Node* p = n->parent(); p; p = p->parent()) if (p == (hgr::Node*)m_scene) { linked = true; break; }
-		if (!linked || !n->enabled()) continue;
-		const math::float3 d = n->worldTransform().translation() - camPos;
-		const float dd = d.x * d.x + d.y * d.y + d.z * d.z;
-		if (dd < bestD) { bestD = dd; best = &m_water[i]; }
-	}
+	const WaterSurface* best = m_surfaces->nearest(camPos);
 	static std::string lastState;
 	std::string state;
 	if (!best) state = "no reflection: no water linked to the scene";

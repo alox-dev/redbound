@@ -4,6 +4,7 @@
 #include "Paths.h"
 #include "SceneSetup.h"
 #include "SceneWorld.h"
+#include "WaterSurfaces.h"
 #include "PassRecipe.h"
 #include <hgr/Camera.h>
 #include <hgr/DefaultResourceManager.h>
@@ -113,49 +114,11 @@ static std::string findLevel(const std::string& dataDir, int index) {
 
 static u32 freeLinear() { return (u32)linearSpaceFree(); }
 
-struct WaterSurface {
-	hgr::Node* node;
-	float height;
+static float tickMs(uint64_t ticks, int frames) { return (float)ticks * 1000.f / SYSCLOCK_ARM11 / (float)std::max(1, frames); }
+
+struct FrameProfile {
+	uint64_t logic = 0, wait = 0, reflection = 0, scene = 0, submit = 0;
 };
-
-static bool isWaterMesh(hgr::Node* n) {
-	if (n->classId() != hgr::Node::NODE_MESH) return false;
-	hgr::Mesh* m = static_cast<hgr::Mesh*>(n);
-	for (int i = 0; i < m->primitives(); ++i) {
-		const gr::Citro3D_Shader* fx = dynamic_cast<gr::Citro3D_Shader*>(m->getPrimitive(i)->shader());
-		if (fx && fx->effect() && fx->effect()->isWater()) return true;
-	}
-	return false;
-}
-
-static bool averageHeight(hgr::Node* n, float& height) {
-	hgr::Mesh* m = static_cast<hgr::Mesh*>(n);
-	const math::float3x4 w = n->worldTransform();
-	double sum = 0;
-	long count = 0;
-	for (int i = 0; i < m->primitives(); ++i) {
-		gr::DIPrimitive* p = dynamic_cast<gr::DIPrimitive*>(m->getPrimitive(i));
-		if (!p || p->vertices() <= 0) continue;
-		std::vector<math::float4> pos((size_t)p->vertices());
-		p->lock(gr::ContextObject::LOCK_READ);
-		p->getVertexPositions(0, &pos[0], (int)pos.size());
-		p->unlock();
-		for (const math::float4& v : pos) sum += w.transform(math::float3(v.x, v.y, v.z)).y;
-		count += (long)pos.size();
-	}
-	if (!count) return false;
-	height = (float)(sum / count);
-	return true;
-}
-
-static std::vector<WaterSurface> findWater(hgr::Scene* scene) {
-	std::vector<WaterSurface> out;
-	for (hgr::Node* n = scene->firstChild(); n; n = n->next(scene)) {
-		WaterSurface w = { n, 0.f };
-		if (isWaterMesh(n) && averageHeight(n, w.height)) out.push_back(w);
-	}
-	return out;
-}
 
 static void clampSkyTextures(hgr::Scene* scene) {
 	for (hgr::Node* n = scene->firstChild(); n; n = n->next(scene)) {
@@ -203,22 +166,12 @@ static void reportMaterials(gr::Citro3D_Context* ctx, hgr::Scene* scene) {
 }
 
 static const char* renderReflection(gr::Citro3D_Context* ctx, hgr::Camera* camera, hgr::Camera* mirror,
-                                    const std::vector<WaterSurface>& water, gr::Texture* target, int clearColor) {
+                                    const WaterSurfaces& water, gr::Texture* target, int clearColor) {
 	ctx->reflectionTexture = 0;
 	if (!target) return "no target";
 	const math::float3x4 camTm = camera->worldTransform();
 	const math::float3 camPos = camTm.translation();
-	const WaterSurface* best = 0;
-	float bestDistance = 1e30f;
-	for (const WaterSurface& w : water) {
-		if (!w.node->enabled()) continue;
-		const math::float3 d = w.node->worldTransform().translation() - camPos;
-		const float dd = d.x * d.x + d.y * d.y + d.z * d.z;
-		if (dd < bestDistance) {
-			bestDistance = dd;
-			best = &w;
-		}
-	}
+	const WaterSurface* best = water.nearest(camPos);
 	if (!best) return "no water";
 	if (camPos.y < best->height) return "below water";
 
@@ -309,7 +262,7 @@ int main() {
 	const float loadSeconds = (float)(svcGetSystemTick() - loadStart) / SYSCLOCK_ARM11;
 
 	std::vector<hgr::Camera*> cameras;
-	std::vector<WaterSurface> water;
+	std::unique_ptr<WaterSurfaces> water;
 	P(hgr::Camera) mirror;
 	P(gr::Texture) reflectionTarget;
 	std::unique_ptr<SceneWorld> world;
@@ -343,7 +296,10 @@ int main() {
 			freeView->setBack(cameras[0]->back());
 			freeCamera.startFrom(cameras[0]);
 		}
-		water = findWater(scene);
+		water.reset(new WaterSurfaces(scene, [](gr::Shader* shader) {
+			const gr::Citro3D_Shader* fx = dynamic_cast<gr::Citro3D_Shader*>(shader);
+			return fx && fx->effect() && fx->effect()->isWater();
+		}));
 		clampSkyTextures(scene);
 		reportMaterials(ctx, scene);
 		world.reset(new SceneWorld(scene));
@@ -370,7 +326,7 @@ int main() {
 			} catch (lang::Throwable&) {
 			}
 		};
-		if (!water.empty()) {
+		if (!water->empty()) {
 			mirror = new hgr::Camera;
 			mirror->setName("water_mirror");
 			mirror->linkTo(scene);
@@ -392,7 +348,7 @@ int main() {
 	snprintf(loadLine, sizeof(loadLine), "load %.1fs: tex %.1f fx %.1f prim %.1f", loadSeconds, (float)ctx->textureTicks / SYSCLOCK_ARM11,
 	         (float)ctx->shaderTicks / SYSCLOCK_ARM11, (float)ctx->primitiveTicks / SYSCLOCK_ARM11);
 	snprintf(sceneLine, sizeof(sceneLine), "%d prims, %d tex %uKB, %d lib, %d water", ctx->primitiveCount, ctx->texturesLoaded,
-	         (unsigned)(ctx->textureBytes / 1024), (int)libraryObjects.size(), (int)water.size());
+	         (unsigned)(ctx->textureBytes / 1024), (int)libraryObjects.size(), water ? (int)water->all().size() : 0);
 	if (!scene) {
 		printf("\nlevel FAILED, START exits\n");
 		while (aptMainLoop()) {
@@ -418,6 +374,7 @@ int main() {
 	KeyRepeat repeatUp, repeatDown, repeatLeft, repeatRight;
 	ctx->lightmapMode = LIGHTMAP_MODES[lightmapChoice];
 	u64 lastTick = svcGetSystemTick();
+	FrameProfile profile;
 	float fpsAverage = 0.f;
 	int frames = 0;
 
@@ -472,6 +429,7 @@ int main() {
 		}
 		ctx->meshLimit = meshLimit;
 
+		const u64 logicStart = svcGetSystemTick();
 		if (world) world->update(dt);
 		ctx->waterNormal = waterFrames.empty() ? 0 : waterFrames[(size_t)(fmodf(ctx->time, 2.f) * 15.f) % waterFrames.size()];
 		int particleSystems = 0;
@@ -490,6 +448,8 @@ int main() {
 			}
 		}
 
+		profile.logic += svcGetSystemTick() - logicStart;
+
 		circlePosition move, look;
 		hidCircleRead(&move);
 		hidCstickRead(&look);
@@ -501,15 +461,24 @@ int main() {
 
 		ctx->meshesDrawn = 0;
 		for (int i = 0; i < 4; ++i) ctx->combinerUse[i] = 0;
+		const u64 waitStart = svcGetSystemTick();
 		C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+		const u64 reflectionStart = svcGetSystemTick();
 		ctx->setTarget(target, TOP_WIDTH, TOP_HEIGHT);
 		ctx->reflectionTexture = 0;
 		reflectionState = "off";
 		if (reflectionEnabled && mirror)
-			reflectionState = renderReflection(ctx, camera, mirror, water, reflectionTarget, (int)clearColor);
+			reflectionState = renderReflection(ctx, camera, mirror, *water, reflectionTarget, (int)clearColor);
+		const u64 sceneStart = svcGetSystemTick();
 		ctx->clear((int)clearColor);
 		camera->render(ctx);
+		const u64 submitStart = svcGetSystemTick();
 		C3D_FrameEnd(0);
+		const u64 frameEnd = svcGetSystemTick();
+		profile.wait += reflectionStart - waitStart;
+		profile.reflection += sceneStart - reflectionStart;
+		profile.scene += submitStart - sceneStart;
+		profile.submit += frameEnd - submitStart;
 
 		fpsAverage += 1.f / std::max(0.0001f, dt);
 		if (++frames >= 15) {
@@ -551,6 +520,14 @@ int main() {
 			line(27, "hold B fast, Y free/level camera");
 			line(28, "D-Pad up/down pick, left/right change");
 			line(29, "START exit");
+			line(23, "logic %.1f refl %.1f scene %.1f end %.1f", tickMs(profile.logic, frames), tickMs(profile.reflection, frames),
+			     tickMs(profile.scene, frames), tickMs(profile.submit, frames));
+			line(24, "pass %.1f upload %.1f sort %.1f draw %.1f", tickMs(ctx->passTicks, frames), tickMs(ctx->uploadTicks, frames),
+			     tickMs(ctx->sortTicks, frames), tickMs(ctx->drawTicks, frames));
+			line(25, "wait gpu %.1f ms, %d passes/frame", tickMs(profile.wait, frames), ctx->passCount / std::max(1, frames));
+			profile = FrameProfile();
+			ctx->passTicks = ctx->uploadTicks = ctx->sortTicks = ctx->drawTicks = 0;
+			ctx->passCount = 0;
 			fpsAverage = 0.f;
 			frames = 0;
 		}
@@ -558,6 +535,7 @@ int main() {
 
 	gr::citro3dShuttingDown = true;
 	world.reset();
+	water.reset();
 	spawned.clear();
 	ctx->waterNormal = 0;
 	waterFrames.clear();

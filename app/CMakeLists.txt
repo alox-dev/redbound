@@ -8,6 +8,7 @@ set(APP_SOURCES
 	FileUtils.cpp
 	Hud.cpp
 	LaunchOptions.cpp
+	LevelCore.cpp
 	LevelMenu.cpp
 	LevelSession.cpp
 	PlayerInput.cpp
