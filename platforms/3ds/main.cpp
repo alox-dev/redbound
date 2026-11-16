@@ -8,6 +8,7 @@
 #include <hgr/Camera.h>
 #include <hgr/DefaultResourceManager.h>
 #include <hgr/Mesh.h>
+#include <hgr/ParticleSystem.h>
 #include <gr/impl/DIPrimitive.h>
 #include <hgr/Scene.h>
 #include <hgr/SceneInputStream.h>
@@ -72,7 +73,7 @@ struct FreeCamera {
 	}
 };
 
-enum MenuItem { MENU_CAMERA, MENU_VIEW, MENU_LIGHTMAP, MENU_LIGHTMAP_UV, MENU_PASSES, MENU_REFLECTION, MENU_SKY_TOP, MENU_SKY_BOTTOM, MENU_CULLING, MENU_SWAP_UV, MENU_MESHES, MENU_SPEED, MENU_COUNT };
+enum MenuItem { MENU_CAMERA, MENU_VIEW, MENU_LIGHTMAP, MENU_PASSES, MENU_REFLECTION, MENU_CULLING, MENU_SWAP_UV, MENU_MESHES, MENU_SPEED, MENU_COUNT };
 
 struct KeyRepeat {
 	float held = 0.f, next = 0.f;
@@ -156,85 +157,19 @@ static std::vector<WaterSurface> findWater(hgr::Scene* scene) {
 	return out;
 }
 
-static std::vector<math::float3> worldPositions(hgr::Node* n, gr::DIPrimitive* p) {
-	const math::float3x4 w = n->worldTransform();
-	std::vector<math::float4> pos((size_t)std::max(0, p->vertices()));
-	std::vector<math::float3> out;
-	if (pos.empty()) return out;
-	p->lock(gr::ContextObject::LOCK_READ);
-	p->getVertexPositions(0, &pos[0], (int)pos.size());
-	p->unlock();
-	for (const math::float4& v : pos) out.push_back(w.transform(math::float3(v.x, v.y, v.z)));
-	return out;
-}
-
-static std::vector<int> triangleList(gr::DIPrimitive* p) {
-	std::vector<int> order;
-	const int count = p->indices() > 0 ? p->indices() : p->vertices();
-	if (p->indices() > 0) {
-		p->lock(gr::ContextObject::LOCK_READ);
-		uint16_t* idx = 0;
-		int size = 0;
-		p->getIndexDataPtr(&idx, &size);
-		for (int i = 0; i < count; ++i) order.push_back(idx[i]);
-		p->unlock();
-	} else {
-		for (int i = 0; i < count; ++i) order.push_back(i);
-	}
-	std::vector<int> tris;
-	if (p->type() == gr::Primitive::PRIM_TRISTRIP) {
-		for (size_t i = 2; i < order.size(); ++i) { tris.push_back(order[i - 2]); tris.push_back(order[i - 1]); tris.push_back(order[i]); }
-	} else if (p->type() == gr::Primitive::PRIM_TRIFAN) {
-		for (size_t i = 2; i < order.size(); ++i) { tris.push_back(order[0]); tris.push_back(order[i - 1]); tris.push_back(order[i]); }
-	} else if (p->type() == gr::Primitive::PRIM_TRI) {
-		tris.assign(order.begin(), order.begin() + order.size() / 3 * 3);
-	}
-	return tris;
-}
-
-static void tagSkyFaces(gr::Citro3D_Context* ctx, hgr::Scene* scene) {
+static void clampSkyTextures(hgr::Scene* scene) {
 	for (hgr::Node* n = scene->firstChild(); n; n = n->next(scene)) {
 		if (n->classId() != hgr::Node::NODE_MESH) continue;
 		hgr::Mesh* mesh = static_cast<hgr::Mesh*>(n);
-		std::vector<std::vector<math::float3> > positions;
 		bool sky = false;
-		math::float3 center(0, 0, 0);
-		int total = 0;
 		for (int i = 0; i < mesh->primitives(); ++i) {
-			gr::DIPrimitive* p = dynamic_cast<gr::DIPrimitive*>(mesh->getPrimitive(i));
-			if (p && p->shader() && materialIsSky(p->shader()->name().c_str())) sky = true;
-			positions.push_back(p ? worldPositions(n, p) : std::vector<math::float3>());
-			for (const math::float3& v : positions.back()) center += v;
-			total += (int)positions.back().size();
+			gr::Shader* fx = mesh->getPrimitive(i)->shader();
+			if (fx && materialIsSky(fx->name().c_str())) sky = true;
 		}
-		if (!sky || !total) continue;
-		center *= 1.f / total;
-		for (int i = 0; i < mesh->primitives(); ++i) {
-			gr::DIPrimitive* p = dynamic_cast<gr::DIPrimitive*>(mesh->getPrimitive(i));
-			gr::Citro3D_Primitive* cp = dynamic_cast<gr::Citro3D_Primitive*>(mesh->getPrimitive(i));
-			if (!p || !cp) continue;
-			const std::vector<math::float3>& w = positions[(size_t)i];
-			std::vector<uint8_t> roles(w.size(), 0);
-			const std::vector<int> tris = triangleList(p);
-			int top = 0, bottom = 0;
-			for (size_t t = 0; t + 2 < tris.size(); t += 3) {
-				const int a = tris[t], b = tris[t + 1], c = tris[t + 2];
-				if (a >= (int)w.size() || b >= (int)w.size() || c >= (int)w.size()) continue;
-				const math::float3 normal = cross(w[b] - w[a], w[c] - w[a]);
-				const float len = normal.length();
-				if (len <= 0.f || std::fabs(normal.y) < 0.9f * len) continue;
-				const uint8_t role = (w[a].y + w[b].y + w[c].y) / 3.f > center.y ? 1 : 2;
-				roles[a] = roles[b] = roles[c] = role;
-			}
-			for (uint8_t r : roles) { top += r == 1; bottom += r == 2; }
-			char note[160];
-			snprintf(note, sizeof(note), "sky %s[%d] '%s' verts %d top %d bottom %d", n->name().c_str(), i,
-			         p->shader() ? p->shader()->name().c_str() : "", (int)w.size(), top, bottom);
-			ctx->report(note);
-			if (top || bottom) cp->setSkyRoles(roles);
-			if (gr::Citro3D_Shader* fx = dynamic_cast<gr::Citro3D_Shader*>(p->shader()))
+		if (!sky) continue;
+		for (int i = 0; i < mesh->primitives(); ++i)
+			if (gr::Citro3D_Shader* fx = dynamic_cast<gr::Citro3D_Shader*>(mesh->getPrimitive(i)->shader()))
 				if (gr::Citro3D_Texture* t = dynamic_cast<gr::Citro3D_Texture*>(fx->getTexture("BASEMAP"))) t->clampToEdge();
-		}
 	}
 }
 
@@ -349,6 +284,7 @@ int main() {
 	gr::Citro3D_Context* ctx = new gr::Citro3D_Context(TOP_WIDTH, TOP_HEIGHT);
 	ctx->setMaxTextureSize(isNew3DS ? 256 : 128);
 	ctx->invertCulling = true;
+	ctx->flipTextures = true;
 	const std::string cacheDir = userDataDir() + "/cache";
 	makeDirectories(cacheDir);
 	if (isDirectory(cacheDir)) ctx->setCacheDir(cacheDir);
@@ -377,6 +313,7 @@ int main() {
 	P(hgr::Camera) mirror;
 	P(gr::Texture) reflectionTarget;
 	std::unique_ptr<SceneWorld> world;
+	std::vector<std::pair<P(hgr::ParticleSystem), float> > spawned;
 	P(hgr::Camera) freeView;
 	FreeCamera freeCamera;
 	int cameraIndex = -1;
@@ -406,7 +343,7 @@ int main() {
 			freeCamera.startFrom(cameras[0]);
 		}
 		water = findWater(scene);
-		tagSkyFaces(ctx, scene);
+		clampSkyTextures(scene);
 		reportMaterials(ctx, scene);
 		world.reset(new SceneWorld(scene));
 		for (LibraryObject& object : libraryObjects) {
@@ -420,6 +357,18 @@ int main() {
 			world->addTrigger(object.trigger, props);
 		}
 		if (world->triggerState("T_butterflyanim") >= 0) world->activateTrigger("T_butterflyanim");
+		world->spawnParticles = [&](const std::string& file, hgr::Node* at) {
+			try {
+				hgr::ParticleSystem* source = resources->getParticleSystem((options.particleDir() + file).c_str(), options.textureDir().c_str(),
+				                                                           options.shaderDir().c_str());
+				if (!source) return;
+				P(hgr::ParticleSystem) ps = new hgr::ParticleSystem(*source);
+				ps->setTransform(at->worldTransform());
+				ps->linkTo(scene);
+				spawned.push_back(std::make_pair(ps, 8.f));
+			} catch (lang::Throwable&) {
+			}
+		};
 		if (!water.empty()) {
 			mirror = new hgr::Camera;
 			mirror->setName("water_mirror");
@@ -503,11 +452,8 @@ int main() {
 				lightmapChoice = cycle(lightmapChoice, 4);
 				ctx->lightmapMode = LIGHTMAP_MODES[lightmapChoice];
 				break;
-			case MENU_LIGHTMAP_UV: ctx->lightmapTransform = cycle(ctx->lightmapTransform, 8); break;
 			case MENU_PASSES: ctx->passFilter = cycle(ctx->passFilter, 3); break;
 			case MENU_REFLECTION: reflectionEnabled = !reflectionEnabled; break;
-			case MENU_SKY_TOP: ctx->skyRotation[0] = cycle(ctx->skyRotation[0], 8); break;
-			case MENU_SKY_BOTTOM: ctx->skyRotation[1] = cycle(ctx->skyRotation[1], 8); break;
 			case MENU_CULLING: ctx->invertCulling = !ctx->invertCulling; break;
 			case MENU_SWAP_UV: ctx->swapUV = !ctx->swapUV; break;
 			case MENU_MESHES: meshLimit = std::max(0, meshLimit + change * amount); break;
@@ -517,6 +463,21 @@ int main() {
 		ctx->meshLimit = meshLimit;
 
 		if (world) world->update(dt);
+		int particleSystems = 0;
+		for (hgr::Node* n = scene->firstChild(); n; n = n->next(scene))
+			if (n->classId() == hgr::Node::NODE_PARTICLESYSTEM) {
+				static_cast<hgr::ParticleSystem*>(n)->update(dt);
+				++particleSystems;
+			}
+		for (size_t i = 0; i < spawned.size();) {
+			spawned[i].second -= dt;
+			if (spawned[i].second <= 0.f) {
+				spawned[i].first->unlink();
+				spawned.erase(spawned.begin() + (long)i);
+			} else {
+				++i;
+			}
+		}
 
 		circlePosition move, look;
 		hidCircleRead(&move);
@@ -550,7 +511,7 @@ int main() {
 			line(7, "linear %u KB  vram %u KB", (unsigned)(freeLinear() / 1024), (unsigned)(vramSpaceFree() / 1024));
 			line(8, "draws vtx %d tex %d lm %d water %d", ctx->combinerUse[0], ctx->combinerUse[1], ctx->combinerUse[2], ctx->combinerUse[3]);
 			line(9, "pos %.0f %.0f %.0f", pos.x, pos.y, pos.z);
-			line(10, "reflection: %s", reflectionState);
+			line(10, "reflection: %s  particles %d", reflectionState, particleSystems);
 			line(12, "---------- debug menu ----------");
 			for (int i = 0; i < MENU_COUNT; ++i) {
 				char value[40] = "";
@@ -561,11 +522,8 @@ int main() {
 					break;
 				case MENU_VIEW: snprintf(value, sizeof(value), "%s", VIEW_NAMES[ctx->debugMode]); break;
 				case MENU_LIGHTMAP: snprintf(value, sizeof(value), "%s", LIGHTMAP_NAMES[lightmapChoice]); break;
-				case MENU_LIGHTMAP_UV: snprintf(value, sizeof(value), "%d", ctx->lightmapTransform); break;
 				case MENU_PASSES: snprintf(value, sizeof(value), "%s", PASS_NAMES[ctx->passFilter]); break;
 				case MENU_REFLECTION: snprintf(value, sizeof(value), "%s", reflectionEnabled ? "on" : "off"); break;
-				case MENU_SKY_TOP: snprintf(value, sizeof(value), "%d", ctx->skyRotation[0]); break;
-				case MENU_SKY_BOTTOM: snprintf(value, sizeof(value), "%d", ctx->skyRotation[1]); break;
 				case MENU_CULLING: snprintf(value, sizeof(value), "%s", ctx->invertCulling ? "inverted" : "normal"); break;
 				case MENU_SWAP_UV: snprintf(value, sizeof(value), "%s", ctx->swapUV ? "on" : "off"); break;
 				case MENU_MESHES:
@@ -574,7 +532,7 @@ int main() {
 					break;
 				case MENU_SPEED: snprintf(value, sizeof(value), "%s", SPEED_NAMES[speedChoice]); break;
 				}
-				static const char* const LABELS[] = { "Camera", "View", "Lightmap", "Lightmap UV", "Passes", "Reflection", "Sky top", "Sky bottom", "Culling", "Swap UV", "Meshes", "Speed" };
+				static const char* const LABELS[] = { "Camera", "View", "Lightmap", "Passes", "Reflection", "Culling", "Swap UV", "Meshes", "Speed" };
 				line(13 + i, "%c %-11s %s", i == menu ? '>' : ' ', LABELS[i], value);
 			}
 			line(26, "Pad move, C-Stick look, L/R down/up");
@@ -588,6 +546,7 @@ int main() {
 
 	gr::citro3dShuttingDown = true;
 	world.reset();
+	spawned.clear();
 	ctx->reflectionTexture = 0;
 	reflectionTarget = 0;
 	mirror = 0;

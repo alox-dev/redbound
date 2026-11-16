@@ -93,6 +93,8 @@ public:
 	bool textured;
 	bool moveUV;
 	bool multiplyDiffuse;
+	bool transform;
+	bool vertexColor;
 
 	bool unlit() const;
 	bool isWater() const;
@@ -164,7 +166,6 @@ public:
 	void setShader(Shader* fx) { m_shader = fx; }
 	Shader* shader() const { return m_shader; }
 	PrimType type() const { return m_type; }
-	void setSkyRoles(const std::vector<uint8_t>& roles) { m_skyRoles = roles; m_dirty = true; }
 	void unlock();
 	void render();
 
@@ -185,8 +186,6 @@ private:
 	int m_vertexCount, m_indexCount;
 	bool m_dirty;
 	SortBuffer m_sortBuffer;
-	std::vector<uint8_t> m_skyRoles;
-	int m_skyApplied;
 
 	void upload();
 	void sortTriangles();
@@ -259,8 +258,6 @@ public:
 	char isolatedMaterial[40];
 	std::string forcedTechnique;
 	P(Texture) reflectionTexture;
-	int skyRotation[2];
-	int lightmapTransform;
 	int passFilter;
 	P(Texture) waterNormal;
 

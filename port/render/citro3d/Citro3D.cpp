@@ -85,7 +85,7 @@ int Citro3D_Effect::findTechnique(const std::string& n) const {
 
 namespace {
 
-const uint32_t TEXTURE_CACHE_MAGIC = 0x52425431;
+const uint32_t TEXTURE_CACHE_MAGIC = 0x52425432;
 
 struct TextureCacheHeader {
 	uint32_t magic;
@@ -141,7 +141,7 @@ Citro3D_Texture::Citro3D_Texture(Citro3D_Context* ctx, const String& filename) :
 	} else {
 		base = resampleRgba(&img.levels[0].rgba[0], img.levels[0].width, img.levels[0].height, base.width, base.height);
 	}
-	if (img.verticalFlipFlag != ctx->flipTextures) {
+	if (ctx->flipTextures) {
 		const size_t row = (size_t)base.width * 4;
 		std::vector<uint8_t> tmp(row);
 		for (int y = 0; y < base.height / 2; ++y) {
@@ -328,7 +328,7 @@ Citro3D_Context::Citro3D_Context(int width, int height) :
 	texturesLoaded(0), texturesFailed(0), effectsLoaded(0), effectsFallback(0), texturesCached(0), textureBytes(0), textureTicks(0), shaderTicks(0), primitiveTicks(0), primitiveCount(0),
 	mirrored(false), flipTextures(false), invertCulling(false), disableAlphaTest(false),
 	debugMode(0), lightmapMode(0), meshLimit(0), meshesDrawn(0), combinerUse{ 0, 0, 0, 0 }, swapUV(false), isolatedMaterial{ 0 },
-	skyRotation{ 3, 1 }, lightmapTransform(6), passFilter(0),
+	passFilter(0),
 	m_width(width), m_height(height), m_platformId(5), m_maxTextureSize(512),
 	m_viewport(0, 0, width, height), m_proj(1.f), m_target(0), m_targetWidth(width), m_targetHeight(height),
 	m_screenTarget(0), m_screenWidth(width), m_screenHeight(height)
@@ -338,7 +338,7 @@ Citro3D_Context::Citro3D_Context(int width, int height) :
 	shaderProgramSetVsh(&m_program, &m_shaderBinary->DVLE[0]);
 	C3D_BindProgram(&m_program);
 
-	static const char* const UNIFORMS[] = { "totalMtx", "worldMtx", "lightPos", "diffuseColor", "ambientColor", "fogRange", "fogColor", "texScale", "uvSwap", "reflScale", "texOffset", "lightmapRow0", "lightmapRow1", "projectReflection" };
+	static const char* const UNIFORMS[] = { "totalMtx", "worldMtx", "lightPos", "diffuseColor", "ambientColor", "fogRange", "fogColor", "texScale", "uvSwap", "reflScale", "texOffset", "colorMix", "projectReflection" };
 	for (const char* n : UNIFORMS) m_uniforms[n] = shaderInstanceGetUniformLocation(m_program.vertexShader, n);
 
 	C3D_AttrInfo* attr = C3D_GetAttrInfo();
@@ -428,6 +428,8 @@ Citro3D_Effect* Citro3D_Context::fallbackEffect() {
 		m_fallback->textured = true;
 		m_fallback->moveUV = false;
 		m_fallback->multiplyDiffuse = false;
+		m_fallback->transform = true;
+		m_fallback->vertexColor = true;
 		redbound::PassRecipe r;
 		r.combiner = PassCombiner::Texture;
 		r.baseSampler = "BASEMAP";
@@ -463,6 +465,8 @@ Citro3D_Effect* Citro3D_Context::loadEffect(const std::string& file, int flags) 
 	e->lit = !defined("DISABLE_LIGHTING");
 	e->lightmap = defined("ENABLE_LIGHTMAP");
 	e->multiplyDiffuse = defined("MULTIPLY_BY_DIFFUSEC");
+	e->transform = !defined("DISABLE_TRANSFORM");
+	e->vertexColor = defined("ENABLE_VERTEXCOLOR");
 	e->textured = !defined("DISABLE_TEXTURE");
 	e->moveUV = defined("ENABLE_MOVEUV");
 	e->priority = fx.globals.count("priority") ? atoi(fx.globals["priority"].c_str()) : 0;
@@ -570,18 +574,10 @@ void Citro3D_Context::setPerspectiveProjection(float hfov, float front, float ba
 	m_proj.setPerspectiveProjection(hfov, front, back, aspect);
 	for (int c = 0; c < 4; ++c)
 		m_proj(2, c) = m_proj(2, c) - m_proj(3, c);
-	for (int c = 0; c < 4; ++c) {
-		const float x = m_proj(0, c), y = m_proj(1, c);
-		m_proj(0, c) = y;
-		m_proj(1, c) = -x;
-	}
 }
 
 void Citro3D_Context::setOrthographicProjection(bool enabled) {
-	if (!enabled) return;
-	m_proj = float4x4(1.f);
-	m_proj(0, 0) = 0.f; m_proj(0, 1) = 1.f;
-	m_proj(1, 0) = -1.f; m_proj(1, 1) = 0.f;
+	if (enabled) m_proj = float4x4(1.f);
 }
 
 void Citro3D_Context::setRenderTarget(Texture* target) {
@@ -882,17 +878,6 @@ void Citro3D_Shader::applyLightmapStages(C3D_TexEnv* first, C3D_TexEnv* second) 
 	}
 }
 
-static void unitSquareTransform(int state, float row[2][3]) {
-	float a = 1.f, b = 0.f, c = 0.f, d = 1.f;
-	if (state >= 4) { a = -1.f; }
-	for (int k = 0; k < (state & 3); ++k) {
-		const float na = -c, nb = -d, nc = a, nd = b;
-		a = na; b = nb; c = nc; d = nd;
-	}
-	row[0][0] = a; row[0][1] = b; row[0][2] = 0.5f - 0.5f * (a + b);
-	row[1][0] = c; row[1][1] = d; row[1][2] = 0.5f - 0.5f * (c + d);
-}
-
 void Citro3D_Shader::applyUniforms(const redbound::PassRecipe& r, redbound::PassCombiner combiner, const std::string& base, const std::string& lightmap) {
 	C3D_Mtx m;
 	const Value* total = 0;
@@ -902,7 +887,7 @@ void Citro3D_Shader::applyUniforms(const redbound::PassRecipe& r, redbound::Pass
 	const auto w = m_values.find("WORLDTM");
 	if (w != m_values.end() && w->second.kind == Value::MAT) world = &w->second;
 
-	setRows(m, total ? total->v : 0);
+	setRows(m, total && m_fx->transform ? total->v : 0);
 	if (m_ctx->uniformLocation("totalMtx") >= 0) C3D_FVUnifMtx4x4(GPU_VERTEX_SHADER, m_ctx->uniformLocation("totalMtx"), &m);
 
 	setRows(m, world ? world->v : 0);
@@ -936,12 +921,8 @@ void Citro3D_Shader::applyUniforms(const redbound::PassRecipe& r, redbound::Pass
 	const float4 offset = m_fx->moveUV ? getVector("TEX0_OFFSET") : float4(0.f, 0.f, 0.f, 0.f);
 	if (m_ctx->uniformLocation("texOffset") >= 0)
 		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("texOffset"), offset.x, offset.y, 0.f, 0.f);
-	float row[2][3];
-	unitSquareTransform(m_ctx->lightmapTransform, row);
-	if (m_ctx->uniformLocation("lightmapRow0") >= 0)
-		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("lightmapRow0"), row[0][0], row[0][1], row[0][2], 0.f);
-	if (m_ctx->uniformLocation("lightmapRow1") >= 0)
-		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("lightmapRow1"), row[1][0], row[1][1], row[1][2], 0.f);
+	if (m_ctx->uniformLocation("colorMix") >= 0)
+		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("colorMix"), m_fx->vertexColor ? 1.f : 0.f, m_fx->vertexColor ? 0.f : 1.f, 0.f, 0.f);
 	if (m_ctx->uniformLocation("projectReflection") >= 0)
 		C3D_BoolUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("projectReflection"), water);
 
@@ -997,7 +978,7 @@ void Citro3D_Shader::endPass() { m_recipe = 0; }
 void Citro3D_Shader::end() {}
 
 Citro3D_Primitive::Citro3D_Primitive(Citro3D_Context* ctx, PrimType type, const VertexFormat& vf, int vertices, int indices) :
-	m_ctx(ctx), m_type(type), m_vertices(0), m_indices(0), m_vertexCount(0), m_indexCount(0), m_dirty(true), m_skyApplied(-1)
+	m_ctx(ctx), m_type(type), m_vertices(0), m_indices(0), m_vertexCount(0), m_indexCount(0), m_dirty(true)
 {
 	setFormat(vf, vertices, indices);
 }
@@ -1011,18 +992,6 @@ Citro3D_Primitive::~Citro3D_Primitive() {
 void Citro3D_Primitive::unlock() {
 	if (locked() & LOCK_WRITE) m_dirty = true;
 	DIPrimitive::unlock();
-}
-
-static void rotateUnitUV(float* uv, int state) {
-	float x = uv[0] - 0.5f, y = uv[1] - 0.5f;
-	if (state >= 4) x = -x;
-	for (int k = 0; k < (state & 3); ++k) {
-		const float t = x;
-		x = -y;
-		y = t;
-	}
-	uv[0] = x + 0.5f;
-	uv[1] = y + 0.5f;
 }
 
 void Citro3D_Primitive::upload() {
@@ -1084,15 +1053,6 @@ void Citro3D_Primitive::upload() {
 		}
 	}
 
-	if (!m_skyRoles.empty()) {
-		for (int i = 0; i < n && i < (int)m_skyRoles.size(); ++i) {
-			if (!m_skyRoles[i]) continue;
-			rotateUnitUV(m_vertices[i].texCoord0, m_ctx->skyRotation[m_skyRoles[i] - 1]);
-			rotateUnitUV(m_vertices[i].texCoord1, m_ctx->skyRotation[m_skyRoles[i] - 1]);
-		}
-		m_skyApplied = m_ctx->skyRotation[0] * 8 + m_ctx->skyRotation[1];
-	}
-
 	if (indices() > 0) {
 		if (indices() != m_indexCount) {
 			linearFree(m_indices);
@@ -1104,8 +1064,10 @@ void Citro3D_Primitive::upload() {
 			int isize = 0;
 			getIndexDataPtr(&idx, &isize);
 			memcpy(m_indices, idx, sizeof(uint16_t) * (size_t)m_indexCount);
+			GSPGPU_FlushDataCache(m_indices, sizeof(uint16_t) * (size_t)m_indexCount);
 		}
 	}
+	GSPGPU_FlushDataCache(m_vertices, sizeof(Vertex) * (size_t)m_vertexCount);
 	DIPrimitive::unlock();
 	m_dirty = false;
 }
@@ -1124,11 +1086,11 @@ void Citro3D_Primitive::sortTriangles() {
 	int isize = 0;
 	getIndexDataPtr(&idx, &isize);
 	memcpy(m_indices, idx, sizeof(uint16_t) * (size_t)m_indexCount);
+	GSPGPU_FlushDataCache(m_indices, sizeof(uint16_t) * (size_t)m_indexCount);
 	DIPrimitive::unlock();
 }
 
 void Citro3D_Primitive::render() {
-	if (!m_skyRoles.empty() && m_skyApplied != m_ctx->skyRotation[0] * 8 + m_ctx->skyRotation[1]) m_dirty = true;
 	if (m_dirty) upload();
 	if (!m_vertices) return;
 	++m_ctx->meshesDrawn;
