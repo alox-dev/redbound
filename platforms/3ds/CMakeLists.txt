@@ -1,5 +1,6 @@
 add_executable(redbound_3ds
   main.cpp
+  ${PROJECT_SOURCE_DIR}/app/LevelCore.cpp
   ${PROJECT_SOURCE_DIR}/app/SceneSetup.cpp
   ${PROJECT_SOURCE_DIR}/app/FileUtils.cpp
   ${PROJECT_SOURCE_DIR}/app/LaunchOptions.cpp

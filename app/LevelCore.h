@@ -49,6 +49,8 @@ public:
 	void setupWorld();
 	void setupPlayer();
 	void setupCamera();
+	std::vector<std::string> preloadParticles();
+	void spawnParticles(const std::string& file, hgr::Node* at);
 	bool update(float dt, float realDt, const LevelInput& input, bool resultsAllowed);
 	hgr::Camera* activeCamera();
 

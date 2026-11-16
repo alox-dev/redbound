@@ -44,6 +44,7 @@ public:
 	void clampToEdge() { if (m_valid) C3D_TexSetWrap(&m_tex, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE); }
 	const std::string& name() const { return m_name; }
 	bool hasAlpha() const { return m_alpha; }
+	float meanRed();
 	bool renderTarget() const { return m_renderTarget; }
 	void detachOwner() { m_owner = 0; }
 	size_t bytes() const { return m_bytes; }
@@ -54,6 +55,7 @@ private:
 	std::string m_name;
 	int m_width, m_height;
 	bool m_valid, m_renderTarget, m_alpha;
+	float m_meanRed;
 	size_t m_bytes;
 
 	void createChecker();
@@ -89,6 +91,10 @@ public:
 	std::vector<std::string> report;
 	bool fallback;
 	bool lit;
+	bool ambient;
+	bool diffuse;
+	bool specular;
+	bool shininessMap;
 	bool lightmap;
 	bool textured;
 	bool moveUV;
@@ -155,6 +161,8 @@ private:
 	void applyStates(const redbound::PassRecipe& r);
 	void applyCombiner(redbound::PassCombiner combiner);
 	void applyWaterStages(C3D_TexEnv* first, C3D_TexEnv* second);
+	bool specularActive() const;
+	math::float4 specularColor();
 	void applyLightmapStages(C3D_TexEnv* first, C3D_TexEnv* second);
 	void applyUniforms(const redbound::PassRecipe& r, redbound::PassCombiner combiner, const std::string& base, const std::string& lightmap);
 };
@@ -262,6 +270,7 @@ public:
 	P(Texture) reflectionTexture;
 	int passFilter;
 	bool waterRipples;
+	bool specularEnabled;
 	P(Texture) waterNormal;
 
 private:

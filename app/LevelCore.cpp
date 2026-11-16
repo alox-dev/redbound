@@ -201,6 +201,29 @@ void LevelCore::setupCamera() {
 	}
 }
 
+std::vector<std::string> LevelCore::preloadParticles() {
+	std::vector<std::string> names;
+	DIR* dir = opendir(m_options.particleDir().c_str());
+	if (!dir) return names;
+	while (struct dirent* entry = readdir(dir)) {
+		const std::string name = entry->d_name;
+		if (!endsWith(toLower(name), ".prs")) continue;
+		try {
+			if (m_resources->getParticleSystem((m_options.particleDir() + name).c_str(), m_options.textureDir().c_str(), m_options.shaderDir().c_str()))
+				names.push_back(name);
+		} catch (lang::Throwable& e) {
+			fprintf(stderr, "particles '%s': %s\n", name.c_str(), e.getMessage().format().c_str());
+		}
+	}
+	closedir(dir);
+	std::sort(names.begin(), names.end());
+	return names;
+}
+
+void LevelCore::spawnParticles(const std::string& file, hgr::Node* at) {
+	if (m_world && m_world->spawnParticles) m_world->spawnParticles(file, at);
+}
+
 void LevelCore::cycleDevCamera() {
 	if (m_cameras.empty()) return;
 	m_devCamera = m_devCamera + 1 >= (int)m_cameras.size() ? -1 : m_devCamera + 1;

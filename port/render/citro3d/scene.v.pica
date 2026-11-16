@@ -1,8 +1,9 @@
 .fvec totalMtx[4], worldMtx[4]
-.fvec lightPos, diffuseColor, ambientColor, fogRange, fogColor, texScale, uvSwap, reflScale, texOffset, colorMix
+.fvec lightPos, diffuseColor, ambientColor, fogRange, fogColor, texScale, uvSwap, reflScale, texOffset, colorMix, cameraPos, specParams
 .bool projectReflection
 
 .constf consts(0.0, 1.0, 0.5, 2.0)
+.constf tiny(0.0001, 0.0, 0.0, 0.0)
 .alias zeros consts.xxxx
 .alias ones consts.yyyy
 
@@ -55,7 +56,27 @@
 	min r7, ones, r7
 	mul r12, colorMix.xxxx, inColor
 	add r12, colorMix.yyyy, r12
-	mul outColor, r7, r12
+	mul r12, r7, r12
+
+	add r13, cameraPos, -r1
+	dp3 r14.x, r13, r13
+	rsq r14.x, r14.x
+	mul r13, r14.xxxx, r13
+	add r13, r13, r4
+	dp3 r14.x, r13, r13
+	rsq r14.x, r14.x
+	mul r13, r14.xxxx, r13
+	dp3 r14.x, r2, r13
+	max r14.x, tiny.xxxx, r14.x
+	lg2 r14.x, r14.x
+	mul r14.x, specParams.xxxx, r14.x
+	ex2 r14.x, r14.x
+	min r14.x, ones, r14.x
+	mul r14.x, specParams.yyyy, r14.x
+	mul r15.x, specParams.zzzz, r12.wwww
+	add r15.x, r15.x, r14.x
+	mov r12.w, r15.x
+	mov outColor, r12
 
 	ifu projectReflection
 		mul r12, reflScale, r11
