@@ -1,5 +1,6 @@
 .fvec totalMtx[4], worldMtx[4]
-.fvec lightPos, diffuseColor, ambientColor, fogRange, fogColor, texScale, uvSwap
+.fvec lightPos, diffuseColor, ambientColor, fogRange, fogColor, texScale, uvSwap, reflScale
+.bool projectReflection
 
 .constf consts(0.0, 1.0, 0.5, 2.0)
 .alias zeros consts.xxxx
@@ -7,6 +8,7 @@
 
 .out outPosition position
 .out outTexCoord0 texcoord0
+.out outTexCoord0w texcoord0w
 .out outTexCoord1 texcoord1
 .out outColor color
 
@@ -20,10 +22,11 @@
 	mov r0.xyz, inPosition
 	mov r0.w, ones
 
-	dp4 outPosition.x, totalMtx[0], r0
-	dp4 outPosition.y, totalMtx[1], r0
-	dp4 outPosition.z, totalMtx[2], r0
-	dp4 outPosition.w, totalMtx[3], r0
+	dp4 r11.x, totalMtx[0], r0
+	dp4 r11.y, totalMtx[1], r0
+	dp4 r11.z, totalMtx[2], r0
+	dp4 r11.w, totalMtx[3], r0
+	mov outPosition, r11
 
 	dp4 r1.x, worldMtx[0], r0
 	dp4 r1.y, worldMtx[1], r0
@@ -50,11 +53,20 @@
 	mul outColor.xyz, r7, inColor
 	mov outColor.w, inColor.w
 
-	mul r8, texScale.xyxy, inTexCoord0
-	mov r10, uvSwap
-	mul r9, r10.xxxx, r8
-	mad r9, r8.yxzw, r10.yyyy, r9
-	mov outTexCoord0, r9
+	ifu projectReflection
+		mul r12, reflScale, r11
+		mul r13, consts.zzzz, r11.wwww
+		add r12, r12, r13
+		mov outTexCoord0, r12
+		mov outTexCoord0w, r11.wwww
+	.else
+		mul r8, texScale.xyxy, inTexCoord0
+		mov r10, uvSwap
+		mul r9, r10.xxxx, r8
+		mad r9, r8.yxzw, r10.yyyy, r9
+		mov outTexCoord0, r9
+		mov outTexCoord0w, ones
+	.end
 	mul outTexCoord1, texScale.zwzw, inTexCoord1
 	end
 .end

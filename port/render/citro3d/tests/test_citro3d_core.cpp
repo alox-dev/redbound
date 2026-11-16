@@ -58,7 +58,7 @@ int main() {
 	r = makePassRecipe(CUTOUT_PS, none, false);
 	CHECK(r.combiner == PassCombiner::Texture && r.baseSampler == "LEAFMAP" && r.alphaTest);
 	r = makePassRecipe("uniform sampler2D REFLMAP; uniform sampler2D NORMALMAP;", none, true);
-	CHECK(r.combiner == PassCombiner::Water && r.blend && r.blendSrc == BlendFactor::SrcAlpha);
+	CHECK(r.combiner == PassCombiner::Water && !r.blend);
 	r = makePassRecipe("void main() {}", none, false);
 	CHECK(r.combiner == PassCombiner::VertexColor);
 

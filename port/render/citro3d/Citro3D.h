@@ -40,6 +40,7 @@ public:
 	void getData(void** bits, int* pitch) const { *bits = 0; *pitch = 0; }
 
 	C3D_Tex* handle() { return m_valid ? &m_tex : 0; }
+	C3D_Tex* projectiveHandle();
 	bool renderTarget() const { return m_renderTarget; }
 	void detachOwner() { m_owner = 0; }
 	size_t bytes() const { return m_bytes; }
@@ -120,6 +121,7 @@ public:
 	const lang::String& name() const { return m_name; }
 
 	static const char* paramName(ParamType p);
+	const Citro3D_Effect* effect() const { return m_fx; }
 	const redbound::PassRecipe* currentRecipe() const { return m_recipe; }
 
 private:
@@ -141,6 +143,7 @@ private:
 	redbound::PassCombiner resolveSamplers(const redbound::PassRecipe& r, std::string& base, std::string& lightmap) const;
 	void applyStates(const redbound::PassRecipe& r);
 	void applyCombiner(redbound::PassCombiner combiner);
+	void applyWaterStages(C3D_TexEnv* first, C3D_TexEnv* second);
 	void applyLightmapStages(C3D_TexEnv* first, C3D_TexEnv* second);
 	void applyUniforms(const redbound::PassRecipe& r, redbound::PassCombiner combiner, const std::string& base, const std::string& lightmap);
 };
@@ -221,7 +224,8 @@ public:
 	void report(const std::string& line) { m_report.push_back(line); }
 	bool writeReport(const std::string& path) const;
 	void registerTexture(Citro3D_Texture* t) { m_textures.insert(t); }
-	void unregisterTexture(Citro3D_Texture* t) { m_textures.erase(t); }
+	void unregisterTexture(Citro3D_Texture* t);
+	bool renderingToTexture() const { return m_target && m_target != m_screenTarget; }
 
 	float time;
 	math::float4 fogRange, fogColor;
@@ -243,6 +247,7 @@ public:
 	char isolatedMaterial[40];
 	std::string forcedTechnique;
 	P(Texture) reflectionTexture;
+	int reflectionFlip;
 	P(Texture) waterNormal;
 
 private:
@@ -257,6 +262,9 @@ private:
 	std::map<std::string, C3D_Tex*> m_neutral;
 	C3D_RenderTarget* m_target;
 	int m_targetWidth, m_targetHeight;
+	C3D_RenderTarget* m_screenTarget;
+	int m_screenWidth, m_screenHeight;
+	std::map<Citro3D_Texture*, C3D_RenderTarget*> m_textureTargets;
 	DVLB_s* m_shaderBinary;
 	shaderProgram_s m_program;
 	std::map<std::string, int> m_uniforms;

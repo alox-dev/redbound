@@ -143,11 +143,6 @@ PassRecipe makePassRecipe(const std::string& pixelSource, const std::map<std::st
 		r.blendSrc = blendFactor(get("blendfuncsrc"), BlendFactor::One);
 		r.blendDst = blendFactor(get("blendfuncdst"), BlendFactor::Zero);
 	}
-	if (water && !r.blend) {
-		r.blend = true;
-		r.blendSrc = BlendFactor::SrcAlpha;
-		r.blendDst = BlendFactor::OneMinusSrcAlpha;
-	}
 	return r;
 }
 
