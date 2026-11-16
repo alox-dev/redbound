@@ -99,6 +99,7 @@ public:
 	bool textured;
 	bool moveUV;
 	bool multiplyDiffuse;
+	bool fog;
 	bool transform;
 	bool vertexColor;
 
@@ -162,6 +163,7 @@ private:
 	void applyCombiner(redbound::PassCombiner combiner);
 	void applyWaterStages(C3D_TexEnv* first, C3D_TexEnv* second);
 	bool specularActive() const;
+	bool fogActive() const;
 	math::float4 specularColor();
 	void applyLightmapStages(C3D_TexEnv* first, C3D_TexEnv* second);
 	void applyUniforms(const redbound::PassRecipe& r, redbound::PassCombiner combiner, const std::string& base, const std::string& lightmap);
@@ -189,14 +191,22 @@ private:
 	Citro3D_Context* m_ctx;
 	PrimType m_type;
 	P(Shader) m_shader;
+	static const int SLOTS = 3;
 	Vertex* m_vertices;
 	uint16_t* m_indices;
+	Vertex* m_vertexSlots[SLOTS];
+	uint16_t* m_indexSlots[SLOTS];
+	int m_vertexSlot, m_indexSlot;
+	unsigned m_vertexFrame, m_indexFrame;
 	int m_vertexCount, m_indexCount;
 	bool m_dirty;
 	SortBuffer m_sortBuffer;
 
 	void upload();
 	void sortTriangles();
+	bool nextVertexBuffer(int count);
+	bool nextIndexBuffer(int count);
+	void releaseBuffers();
 };
 
 class Citro3D_Context : public Context {
@@ -240,6 +250,7 @@ public:
 	void setTarget(C3D_RenderTarget* target, int width, int height);
 	int uniformLocation(const char* name) const;
 	C3D_Tex* neutralTexture(const std::string& sampler);
+	C3D_Tex* fogRamp();
 	void report(const std::string& line) { m_report.push_back(line); }
 	bool writeReport(const std::string& path) const;
 	void registerTexture(Citro3D_Texture* t) { m_textures.insert(t); }
@@ -263,6 +274,7 @@ public:
 	int lightmapMode;
 	int meshLimit;
 	int meshesDrawn;
+	unsigned frameIndex;
 	int combinerUse[4];
 	bool swapUV;
 	char isolatedMaterial[40];
@@ -271,6 +283,10 @@ public:
 	int passFilter;
 	bool waterRipples;
 	bool specularEnabled;
+	float fogStrength;
+	float eyeOffset;
+	float eyeFocus;
+	float eyeShift;
 	P(Texture) waterNormal;
 
 private:
@@ -283,6 +299,7 @@ private:
 	std::set<std::string> m_missingEffects;
 	std::set<Citro3D_Texture*> m_textures;
 	std::map<std::string, C3D_Tex*> m_neutral;
+	C3D_Tex* m_fogRamp;
 	C3D_RenderTarget* m_target;
 	int m_targetWidth, m_targetHeight;
 	C3D_RenderTarget* m_screenTarget;

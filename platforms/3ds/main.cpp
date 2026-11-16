@@ -75,7 +75,44 @@ static LevelInput readInput(const LevelCore& core, float dt, u32 held) {
 	return input;
 }
 
-enum MenuItem { MENU_CAMERA, MENU_LEVEL_CAMERA, MENU_SPAWN_FX, MENU_VIEW, MENU_LIGHTMAP, MENU_PASSES, MENU_REFLECTION, MENU_WATER, MENU_SPECULAR, MENU_MESHES, MENU_COUNT };
+enum MenuItem { MENU_CAMERA, MENU_LEVEL_CAMERA, MENU_SPAWN_FX, MENU_DISPLAY, MENU_VIEW, MENU_FOG, MENU_REFLECTION, MENU_WATER, MENU_SPECULAR, MENU_MESHES, MENU_COUNT };
+
+enum DisplayMode { DISPLAY_NORMAL, DISPLAY_WIDE, DISPLAY_STEREO, DISPLAY_STEREO_SWAPPED, DISPLAY_COUNT };
+
+static const float EYE_SEPARATION = 14.f;
+static const float EYE_FOCUS = 450.f;
+static const u32 TOP_TRANSFER_FLAGS = GX_TRANSFER_FLIP_VERT(0) | GX_TRANSFER_OUT_TILED(0) | GX_TRANSFER_RAW_COPY(0) |
+                                      GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8) | GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8) |
+                                      GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO);
+
+struct TopScreen {
+	C3D_RenderTarget* eyes[2] = { 0, 0 };
+	DisplayMode mode = DISPLAY_NORMAL;
+
+	void release() {
+		for (C3D_RenderTarget*& t : eyes) {
+			if (t) C3D_RenderTargetDelete(t);
+			t = 0;
+		}
+	}
+
+	void setup(DisplayMode m) {
+		release();
+		mode = m;
+		const bool wide = m == DISPLAY_WIDE;
+		const bool stereo = m == DISPLAY_STEREO || m == DISPLAY_STEREO_SWAPPED;
+		if (wide) gfxSetWide(true);
+		else gfxSet3D(stereo);
+		eyes[0] = C3D_RenderTargetCreate(TOP_HEIGHT, wide ? TOP_WIDTH * 2 : TOP_WIDTH, GPU_RB_RGBA8, GPU_RB_DEPTH24_STENCIL8);
+		C3D_RenderTargetSetOutput(eyes[0], GFX_TOP, GFX_LEFT, TOP_TRANSFER_FLAGS);
+		if (stereo) {
+			eyes[1] = C3D_RenderTargetCreate(TOP_HEIGHT, TOP_WIDTH, GPU_RB_RGBA8, GPU_RB_DEPTH24_STENCIL8);
+			C3D_RenderTargetSetOutput(eyes[1], GFX_TOP, GFX_RIGHT, TOP_TRANSFER_FLAGS);
+		}
+	}
+
+	bool stereo() const { return eyes[1] != 0; }
+};
 
 struct KeyRepeat {
 	float held = 0.f, next = 0.f;
@@ -226,10 +263,8 @@ int main() {
 	}
 
 	C3D_Init(C3D_DEFAULT_CMDBUF_SIZE * 2);
-	C3D_RenderTarget* target = C3D_RenderTargetCreate(TOP_HEIGHT, TOP_WIDTH, GPU_RB_RGBA8, GPU_RB_DEPTH24_STENCIL8);
-	C3D_RenderTargetSetOutput(target, GFX_TOP, GFX_LEFT, GX_TRANSFER_FLIP_VERT(0) | GX_TRANSFER_OUT_TILED(0) |
-	                          GX_TRANSFER_RAW_COPY(0) | GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8) |
-	                          GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8) | GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO));
+	TopScreen top;
+	top.setup(DISPLAY_NORMAL);
 
 	LaunchOptions options;
 	options.dataDir = dataDir;
@@ -335,21 +370,21 @@ int main() {
 	}
 	consoleClear();
 
-	static const int LIGHTMAP_MODES[] = { 3, 1, 0, 2 };
-	static const char* const LIGHTMAP_NAMES[] = { "exact (x2)", "add", "mul2", "off" };
 	static const char* const VIEW_NAMES[] = { "normal", "untextured", "no lighting", "lightmap only" };
-	static const char* const PASS_NAMES[] = { "all", "opaque only", "blended only" };
+	static const char* const DISPLAY_NAMES[] = { "400px", "800px wide", "3D", "3D swapped" };
 	int menu = 0;
 	int fxChoice = 0;
 	P(hgr::Dummy) fxAnchor = new hgr::Dummy;
 	fxAnchor->setName("debug_fx");
 	if (scene) fxAnchor->linkTo(scene);
-	int lightmapChoice = 0;
 	int meshLimit = 0;
+	DisplayMode wantedDisplay = DISPLAY_NORMAL;
 	bool reflectionEnabled = true;
 	const char* reflectionState = "off";
 	KeyRepeat repeatUp, repeatDown, repeatLeft, repeatRight;
-	ctx->lightmapMode = LIGHTMAP_MODES[lightmapChoice];
+	ctx->lightmapMode = 3;
+	ctx->eyeFocus = EYE_FOCUS;
+	ctx->fogStrength = 0.35f;
 	u64 lastTick = svcGetSystemTick();
 	FrameProfile profile;
 	float fpsAverage = 0.f;
@@ -392,12 +427,16 @@ int main() {
 			case MENU_SPAWN_FX:
 				if (!particleNames.empty()) fxChoice = cycle(fxChoice, (int)particleNames.size());
 				break;
+			case MENU_DISPLAY: wantedDisplay = (DisplayMode)cycle(wantedDisplay, DISPLAY_COUNT); break;
 			case MENU_VIEW: ctx->debugMode = cycle(ctx->debugMode, 4); break;
-			case MENU_LIGHTMAP:
-				lightmapChoice = cycle(lightmapChoice, 4);
-				ctx->lightmapMode = LIGHTMAP_MODES[lightmapChoice];
+			case MENU_FOG: {
+				static const float STRENGTHS[] = { 0.f, 0.25f, 0.35f, 0.5f, 0.75f, 1.f };
+				int step = 0;
+				for (int i = 0; i < 6; ++i)
+					if (std::fabs(STRENGTHS[i] - ctx->fogStrength) < 0.01f) step = i;
+				ctx->fogStrength = STRENGTHS[cycle(step, 6)];
 				break;
-			case MENU_PASSES: ctx->passFilter = cycle(ctx->passFilter, 3); break;
+			}
 			case MENU_REFLECTION: reflectionEnabled = !reflectionEnabled; break;
 			case MENU_WATER: ctx->waterRipples = !ctx->waterRipples; break;
 			case MENU_SPECULAR: ctx->specularEnabled = !ctx->specularEnabled; break;
@@ -412,19 +451,34 @@ int main() {
 		hgr::Camera* camera = core->activeCamera();
 		profile.logic += svcGetSystemTick() - logicStart;
 
+		if (wantedDisplay != top.mode) {
+			C3D_FrameSync();
+			top.setup(wantedDisplay);
+		}
+		const float slider = top.stereo() ? osGet3DSliderState() : 0.f;
+		const int eyeCount = slider > 0.f ? 2 : 1;
+		const float eyeSign = top.mode == DISPLAY_STEREO_SWAPPED ? -1.f : 1.f;
+
 		ctx->meshesDrawn = 0;
+		++ctx->frameIndex;
 		for (int i = 0; i < 4; ++i) ctx->combinerUse[i] = 0;
 		const u64 waitStart = svcGetSystemTick();
 		C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 		const u64 reflectionStart = svcGetSystemTick();
-		ctx->setTarget(target, TOP_WIDTH, TOP_HEIGHT);
+		ctx->eyeOffset = 0.f;
+		ctx->setTarget(top.eyes[0], TOP_WIDTH, TOP_HEIGHT);
 		ctx->reflectionTexture = 0;
 		reflectionState = "off";
 		if (reflectionEnabled && mirror)
 			reflectionState = renderReflection(ctx, camera, mirror, *water, reflectionTarget, (int)clearColor);
 		const u64 sceneStart = svcGetSystemTick();
-		ctx->clear((int)clearColor);
-		camera->render(ctx);
+		for (int eye = 0; eye < eyeCount; ++eye) {
+			ctx->eyeOffset = eyeCount > 1 ? eyeSign * (eye == 0 ? -0.5f : 0.5f) * EYE_SEPARATION * slider : 0.f;
+			ctx->setTarget(top.eyes[eye], TOP_WIDTH, TOP_HEIGHT);
+			ctx->clear((int)clearColor);
+			camera->render(ctx);
+		}
+		ctx->eyeOffset = 0.f;
 		const u64 submitStart = svcGetSystemTick();
 		C3D_FrameEnd(0);
 		const u64 frameEnd = svcGetSystemTick();
@@ -458,9 +512,20 @@ int main() {
 				case MENU_SPAWN_FX:
 					snprintf(value, sizeof(value), "%s (SELECT)", particleNames.empty() ? "none" : particleNames[(size_t)fxChoice].c_str());
 					break;
+				case MENU_DISPLAY:
+					if (top.stereo()) snprintf(value, sizeof(value), "%s (slider %.0f%%)", DISPLAY_NAMES[top.mode], osGet3DSliderState() * 100.f);
+					else {
+						u16 fbWidth = 0, fbHeight = 0;
+						gfxGetFramebuffer(GFX_TOP, GFX_LEFT, &fbWidth, &fbHeight);
+						snprintf(value, sizeof(value), "%s (fb %u)", DISPLAY_NAMES[top.mode], (unsigned)fbHeight);
+					}
+					break;
 				case MENU_VIEW: snprintf(value, sizeof(value), "%s", VIEW_NAMES[ctx->debugMode]); break;
-				case MENU_LIGHTMAP: snprintf(value, sizeof(value), "%s", LIGHTMAP_NAMES[lightmapChoice]); break;
-				case MENU_PASSES: snprintf(value, sizeof(value), "%s", PASS_NAMES[ctx->passFilter]); break;
+				case MENU_FOG:
+					if (ctx->fogRange.z <= 0.f) snprintf(value, sizeof(value), "none in level");
+					else if (ctx->fogStrength <= 0.f) snprintf(value, sizeof(value), "off");
+					else snprintf(value, sizeof(value), "%.0f%%", ctx->fogStrength * 100.f);
+					break;
 				case MENU_REFLECTION: snprintf(value, sizeof(value), "%s", reflectionEnabled ? "on" : "off"); break;
 				case MENU_WATER: snprintf(value, sizeof(value), "%s (%d frames)", ctx->waterRipples ? "ripples" : "still", (int)waterFrames.size()); break;
 				case MENU_SPECULAR: snprintf(value, sizeof(value), "%s", ctx->specularEnabled ? "on" : "off"); break;
@@ -469,7 +534,7 @@ int main() {
 					else snprintf(value, sizeof(value), "%d %s", meshLimit, ctx->isolatedMaterial);
 					break;
 				}
-				static const char* const LABELS[] = { "Camera", "Level cam", "Spawn fx", "View", "Lightmap", "Passes", "Reflection", "Water", "Specular", "Meshes" };
+				static const char* const LABELS[] = { "Camera", "Level cam", "Spawn fx", "Display", "View", "Fog", "Reflection", "Water", "Specular", "Meshes" };
 				line(13 + i, "%c %-11s %s", i == menu ? '>' : ' ', LABELS[i], value);
 			}
 			line(23, "logic %.1f refl %.1f scene %.1f end %.1f", tickMs(profile.logic, frames), tickMs(profile.reflection, frames),
@@ -499,6 +564,7 @@ int main() {
 	fxAnchor = 0;
 	core.reset();
 	resources = 0;
+	top.release();
 	C3D_Fini();
 	gfxExit();
 	return 0;

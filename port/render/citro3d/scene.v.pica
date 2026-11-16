@@ -1,5 +1,5 @@
 .fvec totalMtx[4], worldMtx[4]
-.fvec lightPos, diffuseColor, ambientColor, fogRange, fogColor, texScale, uvSwap, reflScale, texOffset, colorMix, cameraPos, specParams
+.fvec lightPos, diffuseColor, ambientColor, fogRange, fogColor, texScale, uvSwap, reflScale, texOffset, colorMix, cameraPos, specParams, eyeFix
 .bool projectReflection
 
 .constf consts(0.0, 1.0, 0.5, 2.0)
@@ -11,6 +11,7 @@
 .out outTexCoord0 texcoord0
 .out outTexCoord0w texcoord0w
 .out outTexCoord1 texcoord1
+.out outTexCoord2 texcoord2
 .out outColor color
 
 .alias inPosition v0
@@ -78,8 +79,20 @@
 	mov r12.w, r15.x
 	mov outColor, r12
 
+	add r14, -fogRange.xxxx, r11.wwww
+	mul r14, fogRange.zzzz, r14
+	max r14, zeros, r14
+	min r14, ones, r14
+	mul r14, fogRange.wwww, r14
+	mov r14.y, consts.zzzz
+	mov outTexCoord2, r14
+
 	ifu projectReflection
-		mul r12, reflScale, r11
+		mul r15, eyeFix.xxxx, r11.wwww
+		add r15, eyeFix.yyyy, r15
+		mov r14, r11
+		add r14.y, r14.y, r15.y
+		mul r12, reflScale, r14
 		mul r13, consts.zzzz, r11.wwww
 		add r12, r12, r13
 		mov outTexCoord0, r12

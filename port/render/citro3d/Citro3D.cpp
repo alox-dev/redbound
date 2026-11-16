@@ -343,21 +343,21 @@ bool Citro3D_Context::writeReport(const std::string& path) const {
 }
 
 Citro3D_Context::Citro3D_Context(int width, int height) :
-	time(0.f), fogRange(1e6f, 2e6f, 1e-6f, 0.f), fogColor(0.5f, 0.6f, 0.7f, 1.f),
+	time(0.f), fogRange(0.f, 0.f, 0.f, 0.f), fogColor(1.f, 1.f, 1.f, 1.f),
 	texturesLoaded(0), texturesFailed(0), effectsLoaded(0), effectsFallback(0), texturesCached(0), textureBytes(0), textureTicks(0), shaderTicks(0), primitiveTicks(0), passTicks(0), uploadTicks(0), sortTicks(0), drawTicks(0), passCount(0), primitiveCount(0),
 	mirrored(false), flipTextures(false), invertCulling(false), disableAlphaTest(false),
-	debugMode(0), lightmapMode(0), meshLimit(0), meshesDrawn(0), combinerUse{ 0, 0, 0, 0 }, swapUV(false), isolatedMaterial{ 0 },
-	passFilter(0), waterRipples(true), specularEnabled(true),
+	debugMode(0), lightmapMode(0), meshLimit(0), meshesDrawn(0), frameIndex(0), combinerUse{ 0, 0, 0, 0 }, swapUV(false), isolatedMaterial{ 0 },
+	passFilter(0), waterRipples(true), specularEnabled(true), fogStrength(0.5f), eyeOffset(0.f), eyeFocus(500.f), eyeShift(0.f),
 	m_width(width), m_height(height), m_platformId(5), m_maxTextureSize(512),
 	m_viewport(0, 0, width, height), m_proj(1.f), m_target(0), m_targetWidth(width), m_targetHeight(height),
-	m_screenTarget(0), m_screenWidth(width), m_screenHeight(height)
+	m_screenTarget(0), m_screenWidth(width), m_screenHeight(height), m_fogRamp(0)
 {
 	m_shaderBinary = DVLB_ParseFile((u32*)scene_shbin, scene_shbin_size);
 	shaderProgramInit(&m_program);
 	shaderProgramSetVsh(&m_program, &m_shaderBinary->DVLE[0]);
 	C3D_BindProgram(&m_program);
 
-	static const char* const UNIFORMS[] = { "totalMtx", "worldMtx", "lightPos", "diffuseColor", "ambientColor", "fogRange", "fogColor", "texScale", "uvSwap", "reflScale", "texOffset", "colorMix", "cameraPos", "specParams", "projectReflection" };
+	static const char* const UNIFORMS[] = { "totalMtx", "worldMtx", "lightPos", "diffuseColor", "ambientColor", "fogRange", "fogColor", "texScale", "uvSwap", "reflScale", "texOffset", "colorMix", "cameraPos", "specParams", "eyeFix", "projectReflection" };
 	for (const char* n : UNIFORMS) m_uniforms[n] = shaderInstanceGetUniformLocation(m_program.vertexShader, n);
 
 	C3D_AttrInfo* attr = C3D_GetAttrInfo();
@@ -382,6 +382,10 @@ Citro3D_Context::~Citro3D_Context() {
 	for (auto& kv : m_neutral) {
 		C3D_TexDelete(kv.second);
 		delete kv.second;
+	}
+	if (m_fogRamp) {
+		C3D_TexDelete(m_fogRamp);
+		delete m_fogRamp;
 	}
 	shaderProgramFree(&m_program);
 	DVLB_Free(m_shaderBinary);
@@ -426,6 +430,27 @@ C3D_Tex* Citro3D_Context::neutralTexture(const std::string& sampler) {
 	return tex;
 }
 
+C3D_Tex* Citro3D_Context::fogRamp() {
+	if (m_fogRamp) return m_fogRamp;
+	const int w = 256, h = 8;
+	C3D_Tex* tex = new C3D_Tex;
+	if (!C3D_TexInit(tex, w, h, GPU_RGBA8)) {
+		delete tex;
+		return 0;
+	}
+	std::vector<uint8_t> px((size_t)w * h * 4, 255);
+	for (int y = 0; y < h; ++y)
+		for (int x = 0; x < w; ++x) px[((size_t)y * w + x) * 4 + 3] = (uint8_t)x;
+	std::vector<uint8_t> tiled(px.size());
+	tileLevel(&px[0], w, h, TexelFormat::RGBA8, &tiled[0]);
+	C3D_TexUpload(tex, &tiled[0]);
+	C3D_TexSetFilter(tex, GPU_LINEAR, GPU_LINEAR);
+	C3D_TexSetWrap(tex, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
+	C3D_TexFlush(tex);
+	m_fogRamp = tex;
+	return tex;
+}
+
 std::string Citro3D_Context::resolve(const std::string& dir, const std::string& name) const {
 	std::string n = name;
 	std::replace(n.begin(), n.end(), '\\', '/');
@@ -448,6 +473,7 @@ Citro3D_Effect* Citro3D_Context::fallbackEffect() {
 		m_fallback->textured = true;
 		m_fallback->moveUV = false;
 		m_fallback->multiplyDiffuse = false;
+		m_fallback->fog = true;
 		m_fallback->transform = true;
 		m_fallback->vertexColor = true;
 		redbound::PassRecipe r;
@@ -489,6 +515,7 @@ Citro3D_Effect* Citro3D_Context::loadEffect(const std::string& file, int flags) 
 	e->shininessMap = defined("ENABLE_SHININESS_MAP");
 	e->lightmap = defined("ENABLE_LIGHTMAP");
 	e->multiplyDiffuse = defined("MULTIPLY_BY_DIFFUSEC");
+	e->fog = !defined("DISABLE_FOG");
 	e->transform = !defined("DISABLE_TRANSFORM");
 	e->vertexColor = defined("ENABLE_VERTEXCOLOR");
 	e->textured = !defined("DISABLE_TEXTURE");
@@ -598,6 +625,12 @@ void Citro3D_Context::setPerspectiveProjection(float hfov, float front, float ba
 	m_proj.setPerspectiveProjection(hfov, front, back, aspect);
 	for (int c = 0; c < 4; ++c)
 		m_proj(2, c) = m_proj(2, c) - m_proj(3, c);
+	eyeShift = 0.f;
+	if (eyeOffset != 0.f && eyeFocus > 0.f) {
+		eyeShift = m_proj(0, 0) * eyeOffset;
+		m_proj(0, 2) += eyeShift / eyeFocus;
+		m_proj(0, 3) -= eyeShift;
+	}
 }
 
 void Citro3D_Context::setOrthographicProjection(bool enabled) {
@@ -844,6 +877,17 @@ void Citro3D_Shader::applyCombiner(redbound::PassCombiner combiner) {
 		}
 		break;
 	}
+	if (fogActive()) {
+		C3D_TexEnv* fog = C3D_GetTexEnv(5);
+		C3D_TexEnvSrc(fog, C3D_RGB, GPU_CONSTANT, GPU_PREVIOUS, GPU_TEXTURE2);
+		C3D_TexEnvOpRgb(fog, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_COLOR, GPU_TEVOP_RGB_SRC_ALPHA);
+		C3D_TexEnvFunc(fog, C3D_RGB, GPU_INTERPOLATE);
+		C3D_TexEnvColor(fog, (u32)unitByte(m_ctx->fogColor.x) | ((u32)unitByte(m_ctx->fogColor.y) << 8) | ((u32)unitByte(m_ctx->fogColor.z) << 16) | 0xFF000000u);
+	}
+}
+
+bool Citro3D_Shader::fogActive() const {
+	return m_fx->fog && m_ctx->fogStrength > 0.f && m_ctx->fogRange.z > 0.f && m_ctx->debugMode == 0;
 }
 
 bool Citro3D_Shader::specularActive() const {
@@ -973,8 +1017,14 @@ void Citro3D_Shader::applyUniforms(const redbound::PassRecipe& r, redbound::Pass
 	const float glossiness = m_values.count("GLOSSINESS") ? getFloat("GLOSSINESS") : 16.f;
 	if (m_ctx->uniformLocation("specParams") >= 0)
 		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("specParams"), glossiness, specular ? 1.f : 0.f, specular ? 0.f : 1.f, 0.f);
+	const bool fog = fogActive();
 	if (m_ctx->uniformLocation("fogRange") >= 0)
-		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("fogRange"), m_ctx->fogRange.x, m_ctx->fogRange.y, m_ctx->fogRange.z, m_ctx->fogRange.w);
+		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("fogRange"), fog ? m_ctx->fogRange.x : 0.f, fog ? m_ctx->fogRange.y : 0.f,
+		              fog ? m_ctx->fogRange.z : 0.f, fog ? m_ctx->fogStrength : 0.f);
+	if (m_ctx->uniformLocation("eyeFix") >= 0 && combiner == PassCombiner::Water)
+		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("eyeFix"), 2.f * m_ctx->eyeShift / m_ctx->eyeFocus, -2.f * m_ctx->eyeShift, 0.f, 0.f);
+	if (fog)
+		if (C3D_Tex* ramp = m_ctx->fogRamp()) C3D_TexBind(2, ramp);
 	if (m_ctx->uniformLocation("fogColor") >= 0)
 		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("fogColor"), m_ctx->fogColor.x, m_ctx->fogColor.y, m_ctx->fogColor.z, 1.f);
 	if (m_ctx->uniformLocation("texScale") >= 0)
@@ -1049,15 +1099,63 @@ void Citro3D_Shader::endPass() { m_recipe = 0; }
 void Citro3D_Shader::end() {}
 
 Citro3D_Primitive::Citro3D_Primitive(Citro3D_Context* ctx, PrimType type, const VertexFormat& vf, int vertices, int indices) :
-	m_ctx(ctx), m_type(type), m_vertices(0), m_indices(0), m_vertexCount(0), m_indexCount(0), m_dirty(true)
+	m_ctx(ctx), m_type(type), m_vertices(0), m_indices(0), m_vertexSlots{ 0, 0, 0 }, m_indexSlots{ 0, 0, 0 }, m_vertexSlot(0), m_indexSlot(0),
+	m_vertexFrame(~0u), m_indexFrame(~0u), m_vertexCount(0), m_indexCount(0), m_dirty(true)
 {
 	setFormat(vf, vertices, indices);
 }
 
 Citro3D_Primitive::~Citro3D_Primitive() {
 	if (citro3dShuttingDown) return;
-	linearFree(m_vertices);
-	linearFree(m_indices);
+	releaseBuffers();
+}
+
+void Citro3D_Primitive::releaseBuffers() {
+	for (int i = 0; i < SLOTS; ++i) {
+		linearFree(m_vertexSlots[i]);
+		linearFree(m_indexSlots[i]);
+		m_vertexSlots[i] = 0;
+		m_indexSlots[i] = 0;
+	}
+	m_vertices = 0;
+	m_indices = 0;
+	m_vertexCount = m_indexCount = 0;
+}
+
+bool Citro3D_Primitive::nextVertexBuffer(int count) {
+	if (count != m_vertexCount) {
+		for (int i = 0; i < SLOTS; ++i) {
+			linearFree(m_vertexSlots[i]);
+			m_vertexSlots[i] = 0;
+		}
+		m_vertexSlot = 0;
+		m_vertexCount = count;
+	} else if (m_vertexFrame == m_ctx->frameIndex) {
+		m_vertexSlot = (m_vertexSlot + 1) % SLOTS;
+	}
+	if (!m_vertexSlots[m_vertexSlot]) m_vertexSlots[m_vertexSlot] = (Vertex*)linearAlloc(sizeof(Vertex) * (size_t)count);
+	m_vertices = m_vertexSlots[m_vertexSlot];
+	m_vertexFrame = m_ctx->frameIndex;
+	if (!m_vertices) m_vertexCount = 0;
+	return m_vertices != 0;
+}
+
+bool Citro3D_Primitive::nextIndexBuffer(int count) {
+	if (count != m_indexCount) {
+		for (int i = 0; i < SLOTS; ++i) {
+			linearFree(m_indexSlots[i]);
+			m_indexSlots[i] = 0;
+		}
+		m_indexSlot = 0;
+		m_indexCount = count;
+	} else if (m_indexFrame == m_ctx->frameIndex) {
+		m_indexSlot = (m_indexSlot + 1) % SLOTS;
+	}
+	if (!m_indexSlots[m_indexSlot]) m_indexSlots[m_indexSlot] = (uint16_t*)linearAlloc(sizeof(uint16_t) * (size_t)count);
+	m_indices = m_indexSlots[m_indexSlot];
+	m_indexFrame = m_ctx->frameIndex;
+	if (!m_indices) m_indexCount = 0;
+	return m_indices != 0;
 }
 
 void Citro3D_Primitive::unlock() {
@@ -1068,12 +1166,7 @@ void Citro3D_Primitive::unlock() {
 void Citro3D_Primitive::upload() {
 	const int n = vertices();
 	if (n <= 0) return;
-	if (n != m_vertexCount) {
-		linearFree(m_vertices);
-		m_vertices = (Vertex*)linearAlloc(sizeof(Vertex) * (size_t)n);
-		m_vertexCount = m_vertices ? n : 0;
-	}
-	if (!m_vertices) return;
+	if (!nextVertexBuffer(n)) return;
 	memset(m_vertices, 0, sizeof(Vertex) * (size_t)m_vertexCount);
 
 	lock(LOCK_READ);
@@ -1125,12 +1218,7 @@ void Citro3D_Primitive::upload() {
 	}
 
 	if (indices() > 0) {
-		if (indices() != m_indexCount) {
-			linearFree(m_indices);
-			m_indices = (uint16_t*)linearAlloc(sizeof(uint16_t) * (size_t)indices());
-			m_indexCount = m_indices ? indices() : 0;
-		}
-		if (m_indices) {
+		if (nextIndexBuffer(indices())) {
 			uint16_t* idx = 0;
 			int isize = 0;
 			getIndexDataPtr(&idx, &isize);
@@ -1156,8 +1244,10 @@ void Citro3D_Primitive::sortTriangles() {
 	uint16_t* idx = 0;
 	int isize = 0;
 	getIndexDataPtr(&idx, &isize);
-	memcpy(m_indices, idx, sizeof(uint16_t) * (size_t)m_indexCount);
-	GSPGPU_FlushDataCache(m_indices, sizeof(uint16_t) * (size_t)m_indexCount);
+	if (nextIndexBuffer(m_indexCount)) {
+		memcpy(m_indices, idx, sizeof(uint16_t) * (size_t)m_indexCount);
+		GSPGPU_FlushDataCache(m_indices, sizeof(uint16_t) * (size_t)m_indexCount);
+	}
 	DIPrimitive::unlock();
 }
 
