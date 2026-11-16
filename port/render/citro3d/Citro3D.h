@@ -41,6 +41,9 @@ public:
 
 	C3D_Tex* handle() { return m_valid ? &m_tex : 0; }
 	C3D_Tex* projectiveHandle();
+	void clampToEdge() { if (m_valid) C3D_TexSetWrap(&m_tex, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE); }
+	const std::string& name() const { return m_name; }
+	bool hasAlpha() const { return m_alpha; }
 	bool renderTarget() const { return m_renderTarget; }
 	void detachOwner() { m_owner = 0; }
 	size_t bytes() const { return m_bytes; }
@@ -48,8 +51,9 @@ public:
 private:
 	Citro3D_Context* m_owner;
 	C3D_Tex m_tex;
+	std::string m_name;
 	int m_width, m_height;
-	bool m_valid, m_renderTarget;
+	bool m_valid, m_renderTarget, m_alpha;
 	size_t m_bytes;
 
 	void createChecker();
@@ -84,6 +88,11 @@ public:
 	std::vector<std::vector<redbound::PassRecipe> > techniques;
 	std::vector<std::string> report;
 	bool fallback;
+	bool lit;
+	bool lightmap;
+	bool textured;
+	bool moveUV;
+	bool multiplyDiffuse;
 
 	bool unlit() const;
 	bool isWater() const;
@@ -155,6 +164,7 @@ public:
 	void setShader(Shader* fx) { m_shader = fx; }
 	Shader* shader() const { return m_shader; }
 	PrimType type() const { return m_type; }
+	void setSkyRoles(const std::vector<uint8_t>& roles) { m_skyRoles = roles; m_dirty = true; }
 	void unlock();
 	void render();
 
@@ -175,6 +185,8 @@ private:
 	int m_vertexCount, m_indexCount;
 	bool m_dirty;
 	SortBuffer m_sortBuffer;
+	std::vector<uint8_t> m_skyRoles;
+	int m_skyApplied;
 
 	void upload();
 	void sortTriangles();
@@ -247,7 +259,9 @@ public:
 	char isolatedMaterial[40];
 	std::string forcedTechnique;
 	P(Texture) reflectionTexture;
-	int reflectionFlip;
+	int skyRotation[2];
+	int lightmapTransform;
+	int passFilter;
 	P(Texture) waterNormal;
 
 private:

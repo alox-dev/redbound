@@ -14,6 +14,7 @@ static const char* LIGHTMAP_PS =
 	"void main() { vec4 c = texture2D(BASEMAP, V_TexCoord0); c.rgb += (texture2D(SIMAP, V_TexCoord0).rgb - 0.5) * 2.0; gl_FragColor = c; }\n";
 
 static const char* CUTOUT_PS =
+	"#define ENABLE_ALPHA_TEST\n"
 	"uniform sampler2D LEAFMAP;\n"
 	"uniform sampler2D NORMALMAP;\n"
 	"void main() { vec4 c = texture2D(LEAFMAP, vec2(0.0)); if (c.a < 0.5) discard; gl_FragColor = c; }\n";
@@ -57,6 +58,8 @@ int main() {
 	CHECK(r.combiner == PassCombiner::Lightmap && r.baseSampler == "BASEMAP" && r.lightmapSampler == "SIMAP" && !r.alphaTest);
 	r = makePassRecipe(CUTOUT_PS, none, false);
 	CHECK(r.combiner == PassCombiner::Texture && r.baseSampler == "LEAFMAP" && r.alphaTest);
+	r = makePassRecipe(std::string(CUTOUT_PS).substr(26), none, false);
+	CHECK(!r.alphaTest);
 	r = makePassRecipe("uniform sampler2D REFLMAP; uniform sampler2D NORMALMAP;", none, true);
 	CHECK(r.combiner == PassCombiner::Water && !r.blend);
 	r = makePassRecipe("void main() {}", none, false);

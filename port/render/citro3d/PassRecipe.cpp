@@ -66,17 +66,6 @@ std::vector<std::string> sampledTextures(const std::string& source) {
 	return ordered;
 }
 
-static bool hasWord(const std::string& source, const std::string& word) {
-	size_t at = 0;
-	while ((at = source.find(word, at)) != std::string::npos) {
-		const bool left = at == 0 || !isIdent(source[at - 1]);
-		const bool right = at + word.size() >= source.size() || !isIdent(source[at + word.size()]);
-		if (left && right) return true;
-		at += word.size();
-	}
-	return false;
-}
-
 static bool isAuxiliarySampler(const std::string& name) {
 	return name == "SIMAP" || name == "NORMALMAP" || name == "REFLMAP" || name == "REFRACMAP";
 }
@@ -117,7 +106,7 @@ PassRecipe makePassRecipe(const std::string& pixelSource, const std::map<std::st
 	for (const std::string& s : r.samplers)
 		if (r.baseSampler.empty() && !isAuxiliarySampler(s)) r.baseSampler = s;
 	if (std::find(r.samplers.begin(), r.samplers.end(), "SIMAP") != r.samplers.end()) r.lightmapSampler = "SIMAP";
-	r.alphaTest = hasWord(pixelSource, "discard");
+	r.alphaTest = pixelSource.find("#define ENABLE_ALPHA_TEST") != std::string::npos;
 
 	if (water) r.combiner = PassCombiner::Water;
 	else if (!r.baseSampler.empty() && !r.lightmapSampler.empty()) r.combiner = PassCombiner::Lightmap;

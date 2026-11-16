@@ -67,8 +67,7 @@ static GPU_BLENDEQUATION blendEquation(redbound::BlendEquation e) {
 }
 
 bool Citro3D_Effect::unlit() const {
-	return baseName(name).compare(0, 5, "unlit") == 0 || baseName(name).compare(0, 6, "sprite") == 0 ||
-	       baseName(name).compare(0, 5, "lines") == 0;
+	return !lit;
 }
 
 bool Citro3D_Effect::isWater() const {
@@ -109,7 +108,7 @@ std::string cacheFile(const std::string& dir, const std::string& source, int max
 }
 
 Citro3D_Texture::Citro3D_Texture(Citro3D_Context* ctx, const String& filename) :
-	m_owner(ctx), m_width(1), m_height(1), m_valid(false), m_renderTarget(false), m_bytes(0)
+	m_owner(ctx), m_name(baseName(filename.c_str())), m_width(1), m_height(1), m_valid(false), m_renderTarget(false), m_alpha(false), m_bytes(0)
 {
 	if (m_owner) m_owner->registerTexture(this);
 	const u64 started = svcGetSystemTick();
@@ -160,6 +159,7 @@ Citro3D_Texture::Citro3D_Texture(Citro3D_Context* ctx, const String& filename) :
 	         img.hasAlpha ? "rgba8" : "rgb565", picaMipLevels(base.width, base.height), (int)img.verticalFlipFlag);
 	ctx->report(note);
 	const TexelFormat format = chooseTexelFormat(img.hasAlpha);
+	m_alpha = format == TexelFormat::RGBA8;
 	const GPU_TEXCOLOR gpuFormat = format == TexelFormat::RGBA8 ? GPU_RGBA8 : GPU_RGB565;
 	const int levels = picaMipLevels(base.width, base.height);
 	if (!C3D_TexInitMipmap(&m_tex, (u16)base.width, (u16)base.height, gpuFormat)) {
@@ -221,6 +221,7 @@ bool Citro3D_Texture::loadFromCache(Citro3D_Context* ctx, const std::string& pat
 	m_width = header.width;
 	m_height = header.height;
 	m_valid = true;
+	m_alpha = header.format == (uint8_t)TexelFormat::RGBA8;
 	m_bytes = header.bytes;
 	ctx->textureBytes += m_bytes;
 	applyFilters();
@@ -247,7 +248,7 @@ void Citro3D_Texture::saveToCache(const std::string& path, TexelFormat format, i
 }
 
 Citro3D_Texture::Citro3D_Texture(Citro3D_Context* ctx, int width, int height) :
-	m_owner(ctx), m_width(width), m_height(height), m_valid(false), m_renderTarget(true), m_bytes(0)
+	m_owner(ctx), m_width(width), m_height(height), m_valid(false), m_renderTarget(true), m_alpha(true), m_bytes(0)
 {
 	if (m_owner) m_owner->registerTexture(this);
 	m_width = picaTextureSize(width, ctx->maxTextureSize());
@@ -327,7 +328,7 @@ Citro3D_Context::Citro3D_Context(int width, int height) :
 	texturesLoaded(0), texturesFailed(0), effectsLoaded(0), effectsFallback(0), texturesCached(0), textureBytes(0), textureTicks(0), shaderTicks(0), primitiveTicks(0), primitiveCount(0),
 	mirrored(false), flipTextures(false), invertCulling(false), disableAlphaTest(false),
 	debugMode(0), lightmapMode(0), meshLimit(0), meshesDrawn(0), combinerUse{ 0, 0, 0, 0 }, swapUV(false), isolatedMaterial{ 0 },
-	reflectionFlip(0),
+	skyRotation{ 3, 1 }, lightmapTransform(6), passFilter(0),
 	m_width(width), m_height(height), m_platformId(5), m_maxTextureSize(512),
 	m_viewport(0, 0, width, height), m_proj(1.f), m_target(0), m_targetWidth(width), m_targetHeight(height),
 	m_screenTarget(0), m_screenWidth(width), m_screenHeight(height)
@@ -337,7 +338,7 @@ Citro3D_Context::Citro3D_Context(int width, int height) :
 	shaderProgramSetVsh(&m_program, &m_shaderBinary->DVLE[0]);
 	C3D_BindProgram(&m_program);
 
-	static const char* const UNIFORMS[] = { "totalMtx", "worldMtx", "lightPos", "diffuseColor", "ambientColor", "fogRange", "fogColor", "texScale", "uvSwap", "reflScale", "projectReflection" };
+	static const char* const UNIFORMS[] = { "totalMtx", "worldMtx", "lightPos", "diffuseColor", "ambientColor", "fogRange", "fogColor", "texScale", "uvSwap", "reflScale", "texOffset", "lightmapRow0", "lightmapRow1", "projectReflection" };
 	for (const char* n : UNIFORMS) m_uniforms[n] = shaderInstanceGetUniformLocation(m_program.vertexShader, n);
 
 	C3D_AttrInfo* attr = C3D_GetAttrInfo();
@@ -422,6 +423,11 @@ Citro3D_Effect* Citro3D_Context::fallbackEffect() {
 		m_fallback->priority = 0;
 		m_fallback->sort = Shader::SORT_NONE;
 		m_fallback->fallback = true;
+		m_fallback->lit = false;
+		m_fallback->lightmap = true;
+		m_fallback->textured = true;
+		m_fallback->moveUV = false;
+		m_fallback->multiplyDiffuse = false;
 		redbound::PassRecipe r;
 		r.combiner = PassCombiner::Texture;
 		r.baseSampler = "BASEMAP";
@@ -449,6 +455,16 @@ Citro3D_Effect* Citro3D_Context::loadEffect(const std::string& file, int flags) 
 	P(Citro3D_Effect) e = new Citro3D_Effect;
 	e->name = file;
 	e->fallback = false;
+	auto defined = [&](const char* name) {
+		for (const std::string& d : fx.defines)
+			if (d.compare(0, d.find(' '), name) == 0) return true;
+		return false;
+	};
+	e->lit = !defined("DISABLE_LIGHTING");
+	e->lightmap = defined("ENABLE_LIGHTMAP");
+	e->multiplyDiffuse = defined("MULTIPLY_BY_DIFFUSEC");
+	e->textured = !defined("DISABLE_TEXTURE");
+	e->moveUV = defined("ENABLE_MOVEUV");
 	e->priority = fx.globals.count("priority") ? atoi(fx.globals["priority"].c_str()) : 0;
 	std::string sort = fx.globals.count("sort") ? fx.globals["sort"] : "";
 	std::transform(sort.begin(), sort.end(), sort.begin(), ::toupper);
@@ -739,8 +755,9 @@ redbound::PassCombiner Citro3D_Shader::resolveSamplers(const redbound::PassRecip
 
 	lightmap.clear();
 	base.clear();
-	for (const std::string& n : provided)
-		if (n == "SIMAP") lightmap = n;
+	if (m_fx->lightmap)
+		for (const std::string& n : provided)
+			if (n == "SIMAP") lightmap = n;
 	static const char* const BASE_NAMES[] = { "BASEMAP", "DIFFUSEMAP" };
 	for (const char* n : BASE_NAMES)
 		if (base.empty() && std::find(provided.begin(), provided.end(), n) != provided.end()) base = n;
@@ -752,6 +769,7 @@ redbound::PassCombiner Citro3D_Shader::resolveSamplers(const redbound::PassRecip
 		lightmap.clear();
 		return PassCombiner::Water;
 	}
+	if (!m_fx->textured) base.clear();
 	if (base.empty() && lightmap.empty()) return PassCombiner::VertexColor;
 	if (base.empty()) {
 		base = lightmap;
@@ -844,6 +862,14 @@ void Citro3D_Shader::applyLightmapStages(C3D_TexEnv* first, C3D_TexEnv* second) 
 		C3D_TexEnvSrc(second, C3D_RGB, GPU_PREVIOUS, GPU_PREVIOUS, GPU_PREVIOUS);
 		C3D_TexEnvFunc(second, C3D_RGB, GPU_REPLACE);
 		break;
+	case 3: {
+		C3D_TexEnvSrc(second, C3D_RGB, GPU_PREVIOUS, GPU_TEXTURE1, GPU_PRIMARY_COLOR);
+		C3D_TexEnvFunc(second, C3D_RGB, GPU_ADD_SIGNED);
+		C3D_TexEnv* third = C3D_GetTexEnv(2);
+		C3D_TexEnvSrc(third, C3D_RGB, GPU_PREVIOUS, GPU_TEXTURE1, GPU_PRIMARY_COLOR);
+		C3D_TexEnvFunc(third, C3D_RGB, GPU_ADD_SIGNED);
+		break;
+	}
 	default:
 		C3D_TexEnvSrc(first, C3D_Both, GPU_TEXTURE0, GPU_TEXTURE1, GPU_PRIMARY_COLOR);
 		C3D_TexEnvFunc(first, C3D_RGB, GPU_MODULATE);
@@ -854,6 +880,17 @@ void Citro3D_Shader::applyLightmapStages(C3D_TexEnv* first, C3D_TexEnv* second) 
 		C3D_TexEnvFunc(second, C3D_RGB, GPU_MODULATE);
 		break;
 	}
+}
+
+static void unitSquareTransform(int state, float row[2][3]) {
+	float a = 1.f, b = 0.f, c = 0.f, d = 1.f;
+	if (state >= 4) { a = -1.f; }
+	for (int k = 0; k < (state & 3); ++k) {
+		const float na = -c, nb = -d, nc = a, nd = b;
+		a = na; b = nb; c = nc; d = nd;
+	}
+	row[0][0] = a; row[0][1] = b; row[0][2] = 0.5f - 0.5f * (a + b);
+	row[1][0] = c; row[1][1] = d; row[1][2] = 0.5f - 0.5f * (c + d);
 }
 
 void Citro3D_Shader::applyUniforms(const redbound::PassRecipe& r, redbound::PassCombiner combiner, const std::string& base, const std::string& lightmap) {
@@ -877,13 +914,14 @@ void Citro3D_Shader::applyUniforms(const redbound::PassRecipe& r, redbound::Pass
 
 	float4 diffuse = getVector("DIFFUSEC");
 	if (m_values.find("DIFFUSEC") == m_values.end()) diffuse = float4(1.f, 1.f, 1.f, 1.f);
-	const bool lit = !m_fx->unlit() && m_ctx->debugMode != 2;
+	const bool lit = m_fx->lit && m_ctx->debugMode != 2;
+	if (!lit && !m_fx->multiplyDiffuse) diffuse = float4(1.f, 1.f, 1.f, 1.f);
 	const float ambient = lit ? 0.45f : 1.f;
 	const float scale = lit ? 0.55f : 0.f;
 	if (m_ctx->uniformLocation("diffuseColor") >= 0)
-		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("diffuseColor"), diffuse.x * scale, diffuse.y * scale, diffuse.z * scale, 1.f);
+		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("diffuseColor"), diffuse.x * scale, diffuse.y * scale, diffuse.z * scale, 0.f);
 	if (m_ctx->uniformLocation("ambientColor") >= 0)
-		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("ambientColor"), ambient * diffuse.x, ambient * diffuse.y, ambient * diffuse.z, 1.f);
+		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("ambientColor"), ambient * diffuse.x, ambient * diffuse.y, ambient * diffuse.z, lit ? 1.f : diffuse.w);
 	if (m_ctx->uniformLocation("fogRange") >= 0)
 		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("fogRange"), m_ctx->fogRange.x, m_ctx->fogRange.y, m_ctx->fogRange.z, m_ctx->fogRange.w);
 	if (m_ctx->uniformLocation("fogColor") >= 0)
@@ -894,8 +932,16 @@ void Citro3D_Shader::applyUniforms(const redbound::PassRecipe& r, redbound::Pass
 		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("uvSwap"), m_ctx->swapUV ? 0.f : 1.f, m_ctx->swapUV ? 1.f : 0.f, 0.f, 0.f);
 	const bool water = combiner == PassCombiner::Water;
 	if (m_ctx->uniformLocation("reflScale") >= 0)
-		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("reflScale"), (m_ctx->reflectionFlip & 1) ? -0.5f : 0.5f,
-		              (m_ctx->reflectionFlip & 2) ? -0.5f : 0.5f, 0.f, 0.f);
+		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("reflScale"), 0.5f, 0.5f, 0.f, 0.f);
+	const float4 offset = m_fx->moveUV ? getVector("TEX0_OFFSET") : float4(0.f, 0.f, 0.f, 0.f);
+	if (m_ctx->uniformLocation("texOffset") >= 0)
+		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("texOffset"), offset.x, offset.y, 0.f, 0.f);
+	float row[2][3];
+	unitSquareTransform(m_ctx->lightmapTransform, row);
+	if (m_ctx->uniformLocation("lightmapRow0") >= 0)
+		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("lightmapRow0"), row[0][0], row[0][1], row[0][2], 0.f);
+	if (m_ctx->uniformLocation("lightmapRow1") >= 0)
+		C3D_FVUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("lightmapRow1"), row[1][0], row[1][1], row[1][2], 0.f);
 	if (m_ctx->uniformLocation("projectReflection") >= 0)
 		C3D_BoolUnifSet(GPU_VERTEX_SHADER, m_ctx->uniformLocation("projectReflection"), water);
 
@@ -951,7 +997,7 @@ void Citro3D_Shader::endPass() { m_recipe = 0; }
 void Citro3D_Shader::end() {}
 
 Citro3D_Primitive::Citro3D_Primitive(Citro3D_Context* ctx, PrimType type, const VertexFormat& vf, int vertices, int indices) :
-	m_ctx(ctx), m_type(type), m_vertices(0), m_indices(0), m_vertexCount(0), m_indexCount(0), m_dirty(true)
+	m_ctx(ctx), m_type(type), m_vertices(0), m_indices(0), m_vertexCount(0), m_indexCount(0), m_dirty(true), m_skyApplied(-1)
 {
 	setFormat(vf, vertices, indices);
 }
@@ -965,6 +1011,18 @@ Citro3D_Primitive::~Citro3D_Primitive() {
 void Citro3D_Primitive::unlock() {
 	if (locked() & LOCK_WRITE) m_dirty = true;
 	DIPrimitive::unlock();
+}
+
+static void rotateUnitUV(float* uv, int state) {
+	float x = uv[0] - 0.5f, y = uv[1] - 0.5f;
+	if (state >= 4) x = -x;
+	for (int k = 0; k < (state & 3); ++k) {
+		const float t = x;
+		x = -y;
+		y = t;
+	}
+	uv[0] = x + 0.5f;
+	uv[1] = y + 0.5f;
 }
 
 void Citro3D_Primitive::upload() {
@@ -1026,6 +1084,15 @@ void Citro3D_Primitive::upload() {
 		}
 	}
 
+	if (!m_skyRoles.empty()) {
+		for (int i = 0; i < n && i < (int)m_skyRoles.size(); ++i) {
+			if (!m_skyRoles[i]) continue;
+			rotateUnitUV(m_vertices[i].texCoord0, m_ctx->skyRotation[m_skyRoles[i] - 1]);
+			rotateUnitUV(m_vertices[i].texCoord1, m_ctx->skyRotation[m_skyRoles[i] - 1]);
+		}
+		m_skyApplied = m_ctx->skyRotation[0] * 8 + m_ctx->skyRotation[1];
+	}
+
 	if (indices() > 0) {
 		if (indices() != m_indexCount) {
 			linearFree(m_indices);
@@ -1061,6 +1128,7 @@ void Citro3D_Primitive::sortTriangles() {
 }
 
 void Citro3D_Primitive::render() {
+	if (!m_skyRoles.empty() && m_skyApplied != m_ctx->skyRotation[0] * 8 + m_ctx->skyRotation[1]) m_dirty = true;
 	if (m_dirty) upload();
 	if (!m_vertices) return;
 	++m_ctx->meshesDrawn;
@@ -1070,6 +1138,11 @@ void Citro3D_Primitive::render() {
 			const lang::String& name = m_shader->name();
 			snprintf(m_ctx->isolatedMaterial, sizeof(m_ctx->isolatedMaterial), "%s", name.c_str());
 		}
+	}
+	if (m_ctx->passFilter && m_shader) {
+		const Citro3D_Shader* fx = dynamic_cast<Citro3D_Shader*>((Shader*)m_shader);
+		const redbound::PassRecipe* r = fx ? fx->currentRecipe() : 0;
+		if (r && r->blend != (m_ctx->passFilter == 2)) return;
 	}
 	sortTriangles();
 

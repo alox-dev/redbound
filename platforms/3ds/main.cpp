@@ -3,6 +3,8 @@
 #include "LaunchOptions.h"
 #include "Paths.h"
 #include "SceneSetup.h"
+#include "SceneWorld.h"
+#include "PassRecipe.h"
 #include <hgr/Camera.h>
 #include <hgr/DefaultResourceManager.h>
 #include <hgr/Mesh.h>
@@ -15,40 +17,92 @@
 #include <3ds.h>
 #include <citro3d.h>
 #include <cmath>
+#include <cstdarg>
 #include <cstdio>
+#include <memory>
+#include <set>
 #include <vector>
 
 using namespace redbound;
 
 static const int TOP_WIDTH = 400;
 static const int TOP_HEIGHT = 240;
-static const float MOVE_SPEED = 400.f;
-static const float TURN_SPEED = 2.f;
+static const float TURN_SPEED = 1.8f;
+static const float SPEEDS[] = { 120.f, 400.f, 1500.f };
+
+static float stickAxis(int raw) {
+	const float dead = 15.f, full = 150.f;
+	const float a = std::fabs((float)raw);
+	if (a <= dead) return 0.f;
+	const float t = std::min(1.f, (a - dead) / (full - dead));
+	return (raw < 0 ? -1.f : 1.f) * t * t;
+}
 
 struct FreeCamera {
 	math::float3 position;
 	float yaw = 0.f, pitch = 0.f;
 
-	math::float3x4 transform() const {
-		const math::float3x3 rotation = math::float3x3(math::float3(0, 1, 0), yaw) * math::float3x3(math::float3(1, 0, 0), pitch);
-		return math::float3x4(rotation, position);
+	math::float3 forward() const { return math::float3(sinf(yaw) * cosf(pitch), sinf(pitch), cosf(yaw) * cosf(pitch)); }
+	math::float3 right() const { return math::float3(cosf(yaw), 0.f, -sinf(yaw)); }
+
+	void startFrom(hgr::Camera* camera) {
+		const math::float3x4 tm = camera->worldTransform();
+		position = tm.translation();
+		math::float3 f(tm(0, 2), tm(1, 2), tm(2, 2));
+		const float len = f.length();
+		if (len > 0.f) f *= 1.f / len;
+		yaw = atan2f(f.x, f.z);
+		pitch = asinf(std::max(-1.f, std::min(1.f, f.y)));
 	}
 
-	void update(float dt, const circlePosition& move, const circlePosition& look) {
-		const float dead = 20.f;
-		if (std::fabs((float)look.dx) > dead) yaw -= (float)look.dx / 156.f * TURN_SPEED * dt;
-		if (std::fabs((float)look.dy) > dead) pitch += (float)look.dy / 156.f * TURN_SPEED * dt;
+	void update(float dt, float speed, const circlePosition& move, const circlePosition& look, u32 held) {
+		yaw += stickAxis(look.dx) * TURN_SPEED * dt;
+		pitch += stickAxis(look.dy) * TURN_SPEED * 0.8f * dt;
 		pitch = std::max(-1.5f, std::min(1.5f, pitch));
-		const math::float3x3 rotation = math::float3x3(math::float3(0, 1, 0), yaw) * math::float3x3(math::float3(1, 0, 0), pitch);
-		math::float3 delta(0, 0, 0);
-		if (std::fabs((float)move.dx) > dead) delta += rotation.getColumn(0) * ((float)move.dx / 156.f);
-		if (std::fabs((float)move.dy) > dead) delta -= rotation.getColumn(2) * ((float)move.dy / 156.f);
-		const u32 held = hidKeysHeld();
-		if (held & KEY_X) delta += math::float3(0, 1, 0);
-		if (held & KEY_B) delta -= math::float3(0, 1, 0);
-		position += delta * (MOVE_SPEED * dt);
+		const float step = speed * ((held & KEY_B) ? 4.f : 1.f) * dt;
+		position += forward() * (stickAxis(move.dy) * step);
+		position += right() * (stickAxis(move.dx) * step);
+		if (held & KEY_R) position.y += step;
+		if (held & KEY_L) position.y -= step;
+	}
+
+	void apply(hgr::Camera* camera) const {
+		camera->setPosition(position);
+		camera->lookAt(position + forward());
 	}
 };
+
+enum MenuItem { MENU_CAMERA, MENU_VIEW, MENU_LIGHTMAP, MENU_LIGHTMAP_UV, MENU_PASSES, MENU_REFLECTION, MENU_SKY_TOP, MENU_SKY_BOTTOM, MENU_CULLING, MENU_SWAP_UV, MENU_MESHES, MENU_SPEED, MENU_COUNT };
+
+struct KeyRepeat {
+	float held = 0.f, next = 0.f;
+
+	int update(bool pressed, float dt) {
+		if (!pressed) {
+			held = next = 0.f;
+			return 0;
+		}
+		const bool first = held == 0.f;
+		held += dt;
+		if (first) {
+			next = 0.35f;
+			return 1;
+		}
+		if (held < next) return 0;
+		next = held + 0.07f;
+		return held > 1.5f ? 10 : 1;
+	}
+};
+
+static void line(int row, const char* fmt, ...) __attribute__((format(printf, 2, 3)));
+static void line(int row, const char* fmt, ...) {
+	char text[64];
+	va_list args;
+	va_start(args, fmt);
+	vsnprintf(text, sizeof(text), fmt, args);
+	va_end(args);
+	printf("\x1b[%d;1H%-39.39s", row, text);
+}
 
 static std::string findLevel(const std::string& dataDir, int index) {
 	char name[64];
@@ -100,6 +154,117 @@ static std::vector<WaterSurface> findWater(hgr::Scene* scene) {
 		if (isWaterMesh(n) && averageHeight(n, w.height)) out.push_back(w);
 	}
 	return out;
+}
+
+static std::vector<math::float3> worldPositions(hgr::Node* n, gr::DIPrimitive* p) {
+	const math::float3x4 w = n->worldTransform();
+	std::vector<math::float4> pos((size_t)std::max(0, p->vertices()));
+	std::vector<math::float3> out;
+	if (pos.empty()) return out;
+	p->lock(gr::ContextObject::LOCK_READ);
+	p->getVertexPositions(0, &pos[0], (int)pos.size());
+	p->unlock();
+	for (const math::float4& v : pos) out.push_back(w.transform(math::float3(v.x, v.y, v.z)));
+	return out;
+}
+
+static std::vector<int> triangleList(gr::DIPrimitive* p) {
+	std::vector<int> order;
+	const int count = p->indices() > 0 ? p->indices() : p->vertices();
+	if (p->indices() > 0) {
+		p->lock(gr::ContextObject::LOCK_READ);
+		uint16_t* idx = 0;
+		int size = 0;
+		p->getIndexDataPtr(&idx, &size);
+		for (int i = 0; i < count; ++i) order.push_back(idx[i]);
+		p->unlock();
+	} else {
+		for (int i = 0; i < count; ++i) order.push_back(i);
+	}
+	std::vector<int> tris;
+	if (p->type() == gr::Primitive::PRIM_TRISTRIP) {
+		for (size_t i = 2; i < order.size(); ++i) { tris.push_back(order[i - 2]); tris.push_back(order[i - 1]); tris.push_back(order[i]); }
+	} else if (p->type() == gr::Primitive::PRIM_TRIFAN) {
+		for (size_t i = 2; i < order.size(); ++i) { tris.push_back(order[0]); tris.push_back(order[i - 1]); tris.push_back(order[i]); }
+	} else if (p->type() == gr::Primitive::PRIM_TRI) {
+		tris.assign(order.begin(), order.begin() + order.size() / 3 * 3);
+	}
+	return tris;
+}
+
+static void tagSkyFaces(gr::Citro3D_Context* ctx, hgr::Scene* scene) {
+	for (hgr::Node* n = scene->firstChild(); n; n = n->next(scene)) {
+		if (n->classId() != hgr::Node::NODE_MESH) continue;
+		hgr::Mesh* mesh = static_cast<hgr::Mesh*>(n);
+		std::vector<std::vector<math::float3> > positions;
+		bool sky = false;
+		math::float3 center(0, 0, 0);
+		int total = 0;
+		for (int i = 0; i < mesh->primitives(); ++i) {
+			gr::DIPrimitive* p = dynamic_cast<gr::DIPrimitive*>(mesh->getPrimitive(i));
+			if (p && p->shader() && materialIsSky(p->shader()->name().c_str())) sky = true;
+			positions.push_back(p ? worldPositions(n, p) : std::vector<math::float3>());
+			for (const math::float3& v : positions.back()) center += v;
+			total += (int)positions.back().size();
+		}
+		if (!sky || !total) continue;
+		center *= 1.f / total;
+		for (int i = 0; i < mesh->primitives(); ++i) {
+			gr::DIPrimitive* p = dynamic_cast<gr::DIPrimitive*>(mesh->getPrimitive(i));
+			gr::Citro3D_Primitive* cp = dynamic_cast<gr::Citro3D_Primitive*>(mesh->getPrimitive(i));
+			if (!p || !cp) continue;
+			const std::vector<math::float3>& w = positions[(size_t)i];
+			std::vector<uint8_t> roles(w.size(), 0);
+			const std::vector<int> tris = triangleList(p);
+			int top = 0, bottom = 0;
+			for (size_t t = 0; t + 2 < tris.size(); t += 3) {
+				const int a = tris[t], b = tris[t + 1], c = tris[t + 2];
+				if (a >= (int)w.size() || b >= (int)w.size() || c >= (int)w.size()) continue;
+				const math::float3 normal = cross(w[b] - w[a], w[c] - w[a]);
+				const float len = normal.length();
+				if (len <= 0.f || std::fabs(normal.y) < 0.9f * len) continue;
+				const uint8_t role = (w[a].y + w[b].y + w[c].y) / 3.f > center.y ? 1 : 2;
+				roles[a] = roles[b] = roles[c] = role;
+			}
+			for (uint8_t r : roles) { top += r == 1; bottom += r == 2; }
+			char note[160];
+			snprintf(note, sizeof(note), "sky %s[%d] '%s' verts %d top %d bottom %d", n->name().c_str(), i,
+			         p->shader() ? p->shader()->name().c_str() : "", (int)w.size(), top, bottom);
+			ctx->report(note);
+			if (top || bottom) cp->setSkyRoles(roles);
+			if (gr::Citro3D_Shader* fx = dynamic_cast<gr::Citro3D_Shader*>(p->shader()))
+				if (gr::Citro3D_Texture* t = dynamic_cast<gr::Citro3D_Texture*>(fx->getTexture("BASEMAP"))) t->clampToEdge();
+		}
+	}
+}
+
+static std::string textureNote(gr::Citro3D_Shader* fx, const char* sampler) {
+	gr::Citro3D_Texture* t = dynamic_cast<gr::Citro3D_Texture*>(fx->getTexture(sampler));
+	if (!t) return "-";
+	char note[96];
+	snprintf(note, sizeof(note), "%s %dx%d %s", t->name().c_str(), t->width(), t->height(), t->hasAlpha() ? "rgba8" : "rgb565");
+	return note;
+}
+
+static void reportMaterials(gr::Citro3D_Context* ctx, hgr::Scene* scene) {
+	std::set<std::string> seen;
+	for (hgr::Node* n = scene->firstChild(); n; n = n->next(scene)) {
+		if (n->classId() != hgr::Node::NODE_MESH) continue;
+		hgr::Mesh* mesh = static_cast<hgr::Mesh*>(n);
+		for (int i = 0; i < mesh->primitives(); ++i) {
+			gr::Citro3D_Shader* fx = dynamic_cast<gr::Citro3D_Shader*>(mesh->getPrimitive(i)->shader());
+			if (!fx || !fx->effect()) continue;
+			const std::string key = std::string(fx->name().c_str()) + "|" + fx->effect()->name;
+			if (!seen.insert(key).second) continue;
+			const gr::Citro3D_Effect* e = fx->effect();
+			const size_t slash = e->name.find_last_of('/');
+			char note[400];
+			snprintf(note, sizeof(note), "mat '%s' fx %s lit %d lm %d sort %d node %s base %s simap %s", fx->name().c_str(),
+			         e->name.substr(slash == std::string::npos ? 0 : slash + 1).c_str(), (int)e->lit, (int)e->lightmap, (int)fx->sort(),
+			         n->name().c_str(), textureNote(fx, "BASEMAP").c_str(), textureNote(fx, "SIMAP").c_str());
+			ctx->report(note);
+		}
+	}
 }
 
 static const char* renderReflection(gr::Citro3D_Context* ctx, hgr::Camera* camera, hgr::Camera* mirror,
@@ -184,7 +349,6 @@ int main() {
 	gr::Citro3D_Context* ctx = new gr::Citro3D_Context(TOP_WIDTH, TOP_HEIGHT);
 	ctx->setMaxTextureSize(isNew3DS ? 256 : 128);
 	ctx->invertCulling = true;
-	ctx->lightmapMode = 1;
 	const std::string cacheDir = userDataDir() + "/cache";
 	makeDirectories(cacheDir);
 	if (isDirectory(cacheDir)) ctx->setCacheDir(cacheDir);
@@ -197,7 +361,6 @@ int main() {
 	} catch (lang::Throwable&) {
 	}
 
-	const u32 linearBefore = freeLinear();
 	const u64 loadStart = svcGetSystemTick();
 	P(hgr::DefaultResourceManager) resources = new hgr::DefaultResourceManager(ctx);
 	P(hgr::Scene) scene;
@@ -213,12 +376,14 @@ int main() {
 	std::vector<WaterSurface> water;
 	P(hgr::Camera) mirror;
 	P(gr::Texture) reflectionTarget;
+	std::unique_ptr<SceneWorld> world;
+	P(hgr::Camera) freeView;
 	FreeCamera freeCamera;
-	int cameraIndex = 0;
-	bool useFreeCamera = false;
-	P(hgr::Camera) camera;
+	int cameraIndex = -1;
 
+	std::vector<LibraryObject> libraryObjects;
 	if (scene) {
+		loadLibraryObjects(scene, ctx, resources, options, libraryObjects);
 		hideHelperNodes(scene);
 		cameras = collectCameras(scene);
 		float fogStart = 0.f, fogEnd = 0.f, fogColor[3] = { 0.f, 0.f, 0.f };
@@ -226,19 +391,35 @@ int main() {
 			ctx->fogRange = math::float4(fogStart, fogEnd, 1.f / (fogEnd - fogStart), 0.f);
 			ctx->fogColor = math::float4(fogColor[0], fogColor[1], fogColor[2], 1.f);
 		}
-		camera = cameras.empty() ? 0 : cameras[0];
-		if (!camera) {
-			camera = new hgr::Camera;
-			camera->linkTo(scene);
-			useFreeCamera = true;
-		}
+		freeView = new hgr::Camera;
+		freeView->setName("free_camera");
+		freeView->linkTo(scene);
 		if (cameras.empty()) {
-			camera->setHorizontalFov(1.2f);
-			camera->setFront(10.f);
-			camera->setBack(20000.f);
+			freeView->setHorizontalFov(1.2f);
+			freeView->setFront(10.f);
+			freeView->setBack(20000.f);
+		} else {
+			cameraIndex = 0;
+			freeView->setHorizontalFov(cameras[0]->horizontalFov());
+			freeView->setFront(cameras[0]->front());
+			freeView->setBack(cameras[0]->back());
+			freeCamera.startFrom(cameras[0]);
 		}
-		freeCamera.position = camera->position();
 		water = findWater(scene);
+		tagSkyFaces(ctx, scene);
+		reportMaterials(ctx, scene);
+		world.reset(new SceneWorld(scene));
+		for (LibraryObject& object : libraryObjects) {
+			if (object.properties.find("a01") == std::string::npos) continue;
+			world->registerNode(object.marker, object.visual);
+			std::string props = object.properties;
+			for (size_t at = props.find(",this"); at != std::string::npos; at = props.find(",this", at + 1)) {
+				const char next = at + 5 < props.size() ? props[at + 5] : '\n';
+				if (next == '\n' || next == '\r' || next == ',') props.replace(at + 1, 4, object.marker);
+			}
+			world->addTrigger(object.trigger, props);
+		}
+		if (world->triggerState("T_butterflyanim") >= 0) world->activateTrigger("T_butterflyanim");
 		if (!water.empty()) {
 			mirror = new hgr::Camera;
 			mirror->setName("water_mirror");
@@ -248,61 +429,102 @@ int main() {
 	}
 
 	const unsigned clearColor = scene ? backgroundColor(scene) : 0xFF6688AAu;
-	printf("level: %s\n", scene ? "loaded" : "FAILED");
-	printf("load: %.1f s = tex %.1f + fx %.1f + prim %.1f\n", loadSeconds, (float)ctx->textureTicks / SYSCLOCK_ARM11,
-	       (float)ctx->shaderTicks / SYSCLOCK_ARM11, (float)ctx->primitiveTicks / SYSCLOCK_ARM11);
-	printf("primitives: %d\n", ctx->primitiveCount);
-	printf("textures: %d ok, %d failed, %d cached\n", ctx->texturesLoaded, ctx->texturesFailed, ctx->texturesCached);
-	printf("effects: %d ok, %d fallback\n", ctx->effectsLoaded, ctx->effectsFallback);
-	printf("texture memory: %u KB\n", (unsigned)(ctx->textureBytes / 1024));
-	printf("linear used by level: %u KB\n", (unsigned)((linearBefore - freeLinear()) / 1024));
-	printf("cameras: %d\n", (int)cameras.size());
-	printf("water surfaces: %d, reflection %dx%d\n", (int)water.size(), reflectionTarget ? reflectionTarget->width() : 0,
-	       reflectionTarget ? reflectionTarget->height() : 0);
-	printf("report: %s\n", ctx->writeReport(userDataDir() + "/probe-log.txt") ? "written" : "FAILED");
-	printf("\nPad move, C-Stick look, X/B updown\nL/R camera, Y free camera\nA cull, SELECT swap UV, dUP mode\ndDOWN lightmap, dLEFT/dRIGHT meshes\n(hold L for steps of 25), R camera\nZL reflection, ZR flip reflection\nSTART exits\n");
+	const bool reportWritten = ctx->writeReport(userDataDir() + "/probe-log.txt");
+	char loadLine[64], sceneLine[64];
+	snprintf(loadLine, sizeof(loadLine), "load %.1fs: tex %.1f fx %.1f prim %.1f", loadSeconds, (float)ctx->textureTicks / SYSCLOCK_ARM11,
+	         (float)ctx->shaderTicks / SYSCLOCK_ARM11, (float)ctx->primitiveTicks / SYSCLOCK_ARM11);
+	snprintf(sceneLine, sizeof(sceneLine), "%d prims, %d tex %uKB, %d lib, %d water", ctx->primitiveCount, ctx->texturesLoaded,
+	         (unsigned)(ctx->textureBytes / 1024), (int)libraryObjects.size(), (int)water.size());
+	if (!scene) {
+		printf("\nlevel FAILED, START exits\n");
+		while (aptMainLoop()) {
+			hidScanInput();
+			if (hidKeysDown() & KEY_START) break;
+			gspWaitForVBlank();
+		}
+	}
+	consoleClear();
 
-	int debugMode = 0;
+	static const int LIGHTMAP_MODES[] = { 3, 1, 0, 2 };
+	static const char* const LIGHTMAP_NAMES[] = { "exact (x2)", "add", "mul2", "off" };
+	static const char* const VIEW_NAMES[] = { "normal", "untextured", "no lighting", "lightmap only" };
+	static const char* const SPEED_NAMES[] = { "slow", "normal", "fast" };
+	static const char* const PASS_NAMES[] = { "all", "opaque only", "blended only" };
+	int menu = 0;
+	int lightmapChoice = 0;
+	int speedChoice = 1;
 	int meshLimit = 0;
 	bool reflectionEnabled = true;
+	bool useFreeCamera = cameras.empty();
 	const char* reflectionState = "off";
+	KeyRepeat repeatUp, repeatDown, repeatLeft, repeatRight;
+	ctx->lightmapMode = LIGHTMAP_MODES[lightmapChoice];
 	u64 lastTick = svcGetSystemTick();
 	float fpsAverage = 0.f;
 	int frames = 0;
 
-	while (aptMainLoop()) {
+	while (scene && aptMainLoop()) {
 		hidScanInput();
 		const u32 down = hidKeysDown();
-		if (down & KEY_START) break;
-		if (down & KEY_A) ctx->invertCulling = !ctx->invertCulling;
-		if (down & KEY_DUP) debugMode = (debugMode + 1) % 4;
-		if (down & KEY_DDOWN) ctx->lightmapMode = (ctx->lightmapMode + 1) % 3;
 		const u32 held = hidKeysHeld();
-		const int step = (held & KEY_L) ? 25 : 1;
-		if ((down & KEY_DLEFT) || ((held & KEY_DLEFT) && (frames & 3) == 0)) meshLimit = std::max(0, meshLimit - step);
-		if ((down & KEY_DRIGHT) || ((held & KEY_DRIGHT) && (frames & 3) == 0)) meshLimit += step;
-		ctx->debugMode = debugMode;
-		ctx->meshLimit = meshLimit;
-		if (down & KEY_SELECT) ctx->swapUV = !ctx->swapUV;
-		if (down & KEY_ZL) reflectionEnabled = !reflectionEnabled;
-		if (down & KEY_ZR) ctx->reflectionFlip = (ctx->reflectionFlip + 1) % 4;
-		if (down & KEY_Y) useFreeCamera = !useFreeCamera;
-		if ((down & KEY_R) && !cameras.empty()) {
-			cameraIndex = (cameraIndex + 1) % (int)cameras.size();
-			camera = cameras[cameraIndex];
-		}
+		if (down & KEY_START) break;
 
 		const u64 now = svcGetSystemTick();
 		const float dt = std::min(0.1f, (float)(now - lastTick) / SYSCLOCK_ARM11);
 		lastTick = now;
 		ctx->time += dt;
 
+		if (repeatUp.update(held & KEY_DUP, dt)) menu = (menu + MENU_COUNT - 1) % MENU_COUNT;
+		if (repeatDown.update(held & KEY_DDOWN, dt)) menu = (menu + 1) % MENU_COUNT;
+		const int left = repeatLeft.update(held & KEY_DLEFT, dt), right = repeatRight.update(held & KEY_DRIGHT, dt);
+		const int change = right ? 1 : left ? -1 : 0;
+		const int amount = std::max(left, right);
+		if (down & KEY_Y) {
+			useFreeCamera = !useFreeCamera;
+			if (useFreeCamera && cameraIndex >= 0) freeCamera.startFrom(cameras[cameraIndex]);
+		}
+		if (change) {
+			auto cycle = [&](int value, int count) { return (value + change + count) % count; };
+			switch (menu) {
+			case MENU_CAMERA:
+				if (cameras.empty()) break;
+				if (useFreeCamera) {
+					useFreeCamera = false;
+					cameraIndex = change > 0 ? 0 : (int)cameras.size() - 1;
+				} else if ((change > 0 && cameraIndex == (int)cameras.size() - 1) || (change < 0 && cameraIndex == 0)) {
+					useFreeCamera = true;
+					freeCamera.startFrom(cameras[cameraIndex]);
+				} else {
+					cameraIndex += change;
+				}
+				break;
+			case MENU_VIEW: ctx->debugMode = cycle(ctx->debugMode, 4); break;
+			case MENU_LIGHTMAP:
+				lightmapChoice = cycle(lightmapChoice, 4);
+				ctx->lightmapMode = LIGHTMAP_MODES[lightmapChoice];
+				break;
+			case MENU_LIGHTMAP_UV: ctx->lightmapTransform = cycle(ctx->lightmapTransform, 8); break;
+			case MENU_PASSES: ctx->passFilter = cycle(ctx->passFilter, 3); break;
+			case MENU_REFLECTION: reflectionEnabled = !reflectionEnabled; break;
+			case MENU_SKY_TOP: ctx->skyRotation[0] = cycle(ctx->skyRotation[0], 8); break;
+			case MENU_SKY_BOTTOM: ctx->skyRotation[1] = cycle(ctx->skyRotation[1], 8); break;
+			case MENU_CULLING: ctx->invertCulling = !ctx->invertCulling; break;
+			case MENU_SWAP_UV: ctx->swapUV = !ctx->swapUV; break;
+			case MENU_MESHES: meshLimit = std::max(0, meshLimit + change * amount); break;
+			case MENU_SPEED: speedChoice = std::max(0, std::min(2, speedChoice + change)); break;
+			}
+		}
+		ctx->meshLimit = meshLimit;
+
+		if (world) world->update(dt);
+
 		circlePosition move, look;
 		hidCircleRead(&move);
 		hidCstickRead(&look);
-		if (useFreeCamera && camera) {
-			freeCamera.update(dt, move, look);
-			camera->setTransform(freeCamera.transform());
+		hgr::Camera* camera = useFreeCamera || cameraIndex < 0 ? (hgr::Camera*)freeView : cameras[cameraIndex];
+		if (camera == freeView) {
+			freeCamera.update(dt, SPEEDS[speedChoice], move, look, held);
+			freeCamera.apply(freeView);
 		}
 
 		ctx->meshesDrawn = 0;
@@ -311,37 +533,68 @@ int main() {
 		ctx->setTarget(target, TOP_WIDTH, TOP_HEIGHT);
 		ctx->reflectionTexture = 0;
 		reflectionState = "off";
-		if (reflectionEnabled && scene && camera && mirror)
+		if (reflectionEnabled && mirror)
 			reflectionState = renderReflection(ctx, camera, mirror, water, reflectionTarget, (int)clearColor);
 		ctx->clear((int)clearColor);
-		if (scene && camera) camera->render(ctx);
+		camera->render(ctx);
 		C3D_FrameEnd(0);
 
-		const float gpuTime = C3D_GetDrawingTime();
-		const float cpuTime = C3D_GetProcessingTime();
 		fpsAverage += 1.f / std::max(0.0001f, dt);
-		if (++frames >= 30) {
-			static const char* const LIGHTMAP[] = { "mul2", "add ", "off " };
-			static const char* const MODES[] = { "normal", "untextured", "no lighting", "lightmap only" };
-			static const char* const FLIPS[] = { "none", "u", "v", "uv" };
-			printf("\x1b[s\x1b[22;0Hfps %5.1f  cpu %4.1fms  gpu %4.1fms\nlinear %5u KB  vram %5u KB  cam %d\ncull %s  uv %s  lmap %s   \nmode %-14s meshes %d/%d    \nvtx %d tex %d lm %d water %d      \nrefl %-4s %-18.18s       \n%-38s\x1b[u",
-			       fpsAverage / frames, cpuTime, gpuTime, (unsigned)(freeLinear() / 1024), (unsigned)(vramSpaceFree() / 1024),
-			       cameraIndex, ctx->invertCulling ? "inv" : "nrm", ctx->swapUV ? "swap" : "nrm ",
-			       LIGHTMAP[ctx->lightmapMode], MODES[debugMode], meshLimit, ctx->meshesDrawn,
-			       ctx->combinerUse[0], ctx->combinerUse[1], ctx->combinerUse[2], ctx->combinerUse[3],
-			       FLIPS[ctx->reflectionFlip], reflectionState, meshLimit > 0 ? ctx->isolatedMaterial : "");
+		if (++frames >= 15) {
+			const math::float3 pos = camera->worldTransform().translation();
+			line(1, "Redbound 3DS probe (%s)", isNew3DS ? "New 3DS" : "Old 3DS");
+			line(2, "%s", loadLine);
+			line(3, "%s", sceneLine);
+			line(4, "log %s", reportWritten ? "sdmc:/3ds/redbound/probe-log.txt" : "NOT written");
+			line(6, "fps %.1f  cpu %.1f ms  gpu %.1f ms", fpsAverage / frames, C3D_GetProcessingTime(), C3D_GetDrawingTime());
+			line(7, "linear %u KB  vram %u KB", (unsigned)(freeLinear() / 1024), (unsigned)(vramSpaceFree() / 1024));
+			line(8, "draws vtx %d tex %d lm %d water %d", ctx->combinerUse[0], ctx->combinerUse[1], ctx->combinerUse[2], ctx->combinerUse[3]);
+			line(9, "pos %.0f %.0f %.0f", pos.x, pos.y, pos.z);
+			line(10, "reflection: %s", reflectionState);
+			line(12, "---------- debug menu ----------");
+			for (int i = 0; i < MENU_COUNT; ++i) {
+				char value[40] = "";
+				switch (i) {
+				case MENU_CAMERA:
+					if (camera == freeView) snprintf(value, sizeof(value), "free");
+					else snprintf(value, sizeof(value), "%d/%d %s", cameraIndex + 1, (int)cameras.size(), camera->name().c_str());
+					break;
+				case MENU_VIEW: snprintf(value, sizeof(value), "%s", VIEW_NAMES[ctx->debugMode]); break;
+				case MENU_LIGHTMAP: snprintf(value, sizeof(value), "%s", LIGHTMAP_NAMES[lightmapChoice]); break;
+				case MENU_LIGHTMAP_UV: snprintf(value, sizeof(value), "%d", ctx->lightmapTransform); break;
+				case MENU_PASSES: snprintf(value, sizeof(value), "%s", PASS_NAMES[ctx->passFilter]); break;
+				case MENU_REFLECTION: snprintf(value, sizeof(value), "%s", reflectionEnabled ? "on" : "off"); break;
+				case MENU_SKY_TOP: snprintf(value, sizeof(value), "%d", ctx->skyRotation[0]); break;
+				case MENU_SKY_BOTTOM: snprintf(value, sizeof(value), "%d", ctx->skyRotation[1]); break;
+				case MENU_CULLING: snprintf(value, sizeof(value), "%s", ctx->invertCulling ? "inverted" : "normal"); break;
+				case MENU_SWAP_UV: snprintf(value, sizeof(value), "%s", ctx->swapUV ? "on" : "off"); break;
+				case MENU_MESHES:
+					if (meshLimit == 0) snprintf(value, sizeof(value), "all (%d)", ctx->meshesDrawn);
+					else snprintf(value, sizeof(value), "%d %s", meshLimit, ctx->isolatedMaterial);
+					break;
+				case MENU_SPEED: snprintf(value, sizeof(value), "%s", SPEED_NAMES[speedChoice]); break;
+				}
+				static const char* const LABELS[] = { "Camera", "View", "Lightmap", "Lightmap UV", "Passes", "Reflection", "Sky top", "Sky bottom", "Culling", "Swap UV", "Meshes", "Speed" };
+				line(13 + i, "%c %-11s %s", i == menu ? '>' : ' ', LABELS[i], value);
+			}
+			line(26, "Pad move, C-Stick look, L/R down/up");
+			line(27, "hold B fast, Y free/level camera");
+			line(28, "D-Pad up/down pick, left/right change");
+			line(29, "START exit");
 			fpsAverage = 0.f;
 			frames = 0;
 		}
 	}
 
 	gr::citro3dShuttingDown = true;
+	world.reset();
 	ctx->reflectionTexture = 0;
 	reflectionTarget = 0;
 	mirror = 0;
+	freeView = 0;
+	libraryObjects.clear();
 	scene = 0;
 	resources = 0;
-	camera = 0;
 	cameras.clear();
 	C3D_Fini();
 	gfxExit();

@@ -1,5 +1,5 @@
 .fvec totalMtx[4], worldMtx[4]
-.fvec lightPos, diffuseColor, ambientColor, fogRange, fogColor, texScale, uvSwap, reflScale
+.fvec lightPos, diffuseColor, ambientColor, fogRange, fogColor, texScale, uvSwap, reflScale, texOffset, lightmapRow0, lightmapRow1
 .bool projectReflection
 
 .constf consts(0.0, 1.0, 0.5, 2.0)
@@ -50,8 +50,7 @@
 	mul r7, diffuseColor, r6.xxxx
 	add r7, ambientColor, r7
 	min r7, ones, r7
-	mul outColor.xyz, r7, inColor
-	mov outColor.w, inColor.w
+	mul outColor, r7, inColor
 
 	ifu projectReflection
 		mul r12, reflScale, r11
@@ -61,12 +60,18 @@
 		mov outTexCoord0w, r11.wwww
 	.else
 		mul r8, texScale.xyxy, inTexCoord0
+		add r8, texOffset, r8
 		mov r10, uvSwap
 		mul r9, r10.xxxx, r8
 		mad r9, r8.yxzw, r10.yyyy, r9
 		mov outTexCoord0, r9
 		mov outTexCoord0w, ones
 	.end
-	mul outTexCoord1, texScale.zwzw, inTexCoord1
+	mov r14.xy, inTexCoord1
+	mov r14.zw, ones
+	dp3 r15.x, lightmapRow0, r14
+	dp3 r15.y, lightmapRow1, r14
+	mov r15.zw, zeros
+	mov outTexCoord1, r15
 	end
 .end
